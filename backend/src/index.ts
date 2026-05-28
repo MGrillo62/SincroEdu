@@ -23,7 +23,13 @@ import {
   Campus,
   AuditLog,
   Student,
-  Enrollment
+  Enrollment,
+  leads,
+  leadActivities,
+  leadTasks,
+  Lead,
+  LeadActivity,
+  LeadTask
 } from './db';
 
 dotenv.config();
@@ -1295,6 +1301,395 @@ app.delete('/api/tenants/:tenantId/students/:studentId/enrollments/:enrollmentId
   );
 
   return res.json(newEnrollment);
+});
+
+// ============================================================================
+// MODULO CRM Y CAPTACION DE LEADS (ADMISIÓN ESCOLAR MULTI-TENANT)
+// ============================================================================
+
+// Helper para extraer tenantId de forma segura
+const getRequestTenantId = (req: AuthenticatedRequest): string | null => {
+  if (req.user?.tenantId) return req.user.tenantId;
+  if (req.user?.roleId === 'r-superadmin') {
+    return (req.query.tenantId as string) || (req.body.tenantId as string) || 't-11111111-1111-1111-1111-111111111111';
+  }
+  return null;
+};
+
+// 1. Obtener todos los Leads del Tenant
+app.get('/api/crm/leads', authenticateJWT, (req: AuthenticatedRequest, res: Response) => {
+  const tenantId = getRequestTenantId(req);
+  if (!tenantId) {
+    return res.status(400).json({ error: 'Identificador del Tenant no especificado' });
+  }
+
+  // Filtrar leads del tenant
+  let filteredLeads = leads.filter(l => l.tenantId === tenantId);
+
+  // Filtros opcionales
+  const { stage, source } = req.query;
+  if (stage) {
+    filteredLeads = filteredLeads.filter(l => l.status === stage);
+  }
+  if (source) {
+    filteredLeads = filteredLeads.filter(l => l.source === source);
+  }
+
+  // Ordenar de más nuevo a más antiguo
+  filteredLeads.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  return res.json(filteredLeads);
+});
+
+// 2. Crear un nuevo Lead
+app.post('/api/crm/leads', authenticateJWT, (req: AuthenticatedRequest, res: Response) => {
+  const tenantId = getRequestTenantId(req);
+  if (!tenantId) {
+    return res.status(400).json({ error: 'Identificador del Tenant no especificado' });
+  }
+
+  const { firstName, lastName, parentName, email, phone, gradeInterested, source, assignedUserId } = req.body;
+
+  if (!firstName || !lastName || !parentName || !email || !phone || !gradeInterested || !source) {
+    return res.status(400).json({ error: 'Todos los campos son obligatorios' });
+  }
+
+  const newLeadId = `ld-${Date.now()}`;
+  const newLead: Lead = {
+    id: newLeadId,
+    tenantId,
+    firstName,
+    lastName,
+    parentName,
+    email,
+    phone,
+    gradeInterested,
+    source,
+    status: 'new',
+    assignedUserId: assignedUserId || req.user?.id || 'u-admin1',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  leads.push(newLead);
+
+  // Registrar Actividad de Captación del Sistema
+  leadActivities.push({
+    id: `la-${Date.now()}`,
+    leadId: newLeadId,
+    type: 'system',
+    summary: 'Lead captado e ingresado',
+    details: `Prospecto ingresado mediante canal [${source}]. Interesado en ${gradeInterested}. Apoderado: ${parentName}.`,
+    createdBy: req.user?.email || 'Sistema',
+    createdAt: new Date().toISOString()
+  });
+
+  // Registrar Auditoría Inmutable
+  addAuditLog(
+    tenantId,
+    'leads',
+    newLeadId,
+    'CREATE',
+    req.user?.email || 'admin@colegiopremium.edu',
+    null,
+    newLead
+  );
+
+  return res.status(201).json(newLead);
+});
+
+// 3. Modificar datos del Lead
+app.put('/api/crm/leads/:leadId', authenticateJWT, (req: AuthenticatedRequest, res: Response) => {
+  const tenantId = getRequestTenantId(req);
+  const { leadId } = req.params;
+
+  if (!tenantId) {
+    return res.status(400).json({ error: 'Identificador del Tenant no especificado' });
+  }
+
+  const leadIdx = leads.findIndex(l => l.id === leadId && l.tenantId === tenantId);
+  if (leadIdx === -1) {
+    return res.status(404).json({ error: 'Prospecto no encontrado' });
+  }
+
+  const previousLead = { ...leads[leadIdx] };
+  const { firstName, lastName, parentName, email, phone, gradeInterested, assignedUserId } = req.body;
+
+  if (firstName) leads[leadIdx].firstName = firstName;
+  if (lastName) leads[leadIdx].lastName = lastName;
+  if (parentName) leads[leadIdx].parentName = parentName;
+  if (email) leads[leadIdx].email = email;
+  if (phone) leads[leadIdx].phone = phone;
+  if (gradeInterested) leads[leadIdx].gradeInterested = gradeInterested;
+  if (assignedUserId !== undefined) leads[leadIdx].assignedUserId = assignedUserId;
+  leads[leadIdx].updatedAt = new Date().toISOString();
+
+  const updatedLead = leads[leadIdx];
+
+  // Registrar en la Bitácora Comercial de Actividades
+  leadActivities.push({
+    id: `la-${Date.now()}`,
+    leadId,
+    type: 'system',
+    summary: 'Ficha comercial editada',
+    details: 'Se actualizaron los datos personales o de contacto del prospecto escolar.',
+    createdBy: req.user?.email || 'Asesor Comercial',
+    createdAt: new Date().toISOString()
+  });
+
+  // Registrar Auditoría Inmutable
+  addAuditLog(
+    tenantId,
+    'leads',
+    leadId,
+    'UPDATE',
+    req.user?.email || 'admin@colegiopremium.edu',
+    previousLead,
+    updatedLead
+  );
+
+  return res.json(updatedLead);
+});
+
+// 4. Mutar Etapa del Embudo (Pipeline Step)
+app.patch('/api/crm/leads/:leadId/stage', authenticateJWT, (req: AuthenticatedRequest, res: Response) => {
+  const tenantId = getRequestTenantId(req);
+  const { leadId } = req.params;
+  const { status, lostReason } = req.body;
+
+  if (!tenantId) {
+    return res.status(400).json({ error: 'Identificador del Tenant no especificado' });
+  }
+
+  const leadIdx = leads.findIndex(l => l.id === leadId && l.tenantId === tenantId);
+  if (leadIdx === -1) {
+    return res.status(404).json({ error: 'Prospecto no encontrado' });
+  }
+
+  const allowedStages = ['new', 'contacted', 'tour_scheduled', 'evaluation', 'approved', 'enrolled', 'lost'];
+  if (!allowedStages.includes(status)) {
+    return res.status(400).json({ error: 'Etapa del pipeline no válida' });
+  }
+
+  if (status === 'lost' && !lostReason) {
+    return res.status(400).json({ error: 'Es obligatorio especificar un motivo de descarte' });
+  }
+
+  const previousLead = { ...leads[leadIdx] };
+  leads[leadIdx].status = status;
+  if (status === 'lost') {
+    leads[leadIdx].lostReason = lostReason;
+  } else {
+    leads[leadIdx].lostReason = undefined;
+  }
+  leads[leadIdx].updatedAt = new Date().toISOString();
+
+  const updatedLead = leads[leadIdx];
+
+  // Registrar Actividad de Transición en la Bitácora
+  leadActivities.push({
+    id: `la-${Date.now()}`,
+    leadId,
+    type: 'system',
+    summary: `Etapa actualizada a [${status.toUpperCase()}]`,
+    details: status === 'lost' 
+      ? `El prospecto fue retirado del pipeline. Motivo: "${lostReason}"`
+      : `Asesor comercial desplazó la tarjeta de admisión de [${previousLead.status}] a [${status}].`,
+    createdBy: req.user?.email || 'Asesor Comercial',
+    createdAt: new Date().toISOString()
+  });
+
+  // Registrar Auditoría Inmutable
+  addAuditLog(
+    tenantId,
+    'leads',
+    leadId,
+    'STATUS_CHANGE',
+    req.user?.email || 'admin@colegiopremium.edu',
+    { status: previousLead.status, lostReason: previousLead.lostReason },
+    { status, lostReason }
+  );
+
+  return res.json(updatedLead);
+});
+
+// 5. Obtener Bitácora (Timeline) de un Lead
+app.get('/api/crm/leads/:leadId/timeline', authenticateJWT, (req: AuthenticatedRequest, res: Response) => {
+  const tenantId = getRequestTenantId(req);
+  const { leadId } = req.params;
+
+  if (!tenantId) {
+    return res.status(400).json({ error: 'Identificador del Tenant no especificado' });
+  }
+
+  // Validar pertenencia del lead
+  const leadExists = leads.some(l => l.id === leadId && l.tenantId === tenantId);
+  if (!leadExists) {
+    return res.status(404).json({ error: 'Lead no encontrado o fuera de aislamiento' });
+  }
+
+  const timeline = leadActivities.filter(a => a.leadId === leadId);
+  timeline.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  return res.json(timeline);
+});
+
+// 6. Registrar Interacción (Llamada, Correo, Reunión, Nota)
+app.post('/api/crm/leads/:leadId/activities', authenticateJWT, (req: AuthenticatedRequest, res: Response) => {
+  const tenantId = getRequestTenantId(req);
+  const { leadId } = req.params;
+  const { type, summary, details } = req.body;
+
+  if (!tenantId) {
+    return res.status(400).json({ error: 'Identificador del Tenant no especificado' });
+  }
+
+  if (!type || !summary) {
+    return res.status(400).json({ error: 'Tipo y resumen de interacción son obligatorios' });
+  }
+
+  const leadExists = leads.some(l => l.id === leadId && l.tenantId === tenantId);
+  if (!leadExists) {
+    return res.status(404).json({ error: 'Lead no encontrado' });
+  }
+
+  const newActivity: LeadActivity = {
+    id: `la-${Date.now()}`,
+    leadId,
+    type,
+    summary,
+    details: details || '',
+    createdBy: req.user?.email || 'Asesor Comercial',
+    createdAt: new Date().toISOString()
+  };
+
+  leadActivities.push(newActivity);
+
+  return res.status(201).json(newActivity);
+});
+
+// 7. Obtener Tareas de Seguimiento de un Lead
+app.get('/api/crm/leads/:leadId/tasks', authenticateJWT, (req: AuthenticatedRequest, res: Response) => {
+  const tenantId = getRequestTenantId(req);
+  const { leadId } = req.params;
+
+  if (!tenantId) {
+    return res.status(400).json({ error: 'Identificador del Tenant no especificado' });
+  }
+
+  const leadExists = leads.some(l => l.id === leadId && l.tenantId === tenantId);
+  if (!leadExists) {
+    return res.status(404).json({ error: 'Lead no encontrado o fuera de aislamiento' });
+  }
+
+  const tasks = leadTasks.filter(t => t.leadId === leadId);
+  tasks.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+
+  return res.json(tasks);
+});
+
+// 8. Crear Tarea de Seguimiento
+app.post('/api/crm/leads/:leadId/tasks', authenticateJWT, (req: AuthenticatedRequest, res: Response) => {
+  const tenantId = getRequestTenantId(req);
+  const { leadId } = req.params;
+  const { title, dueDate } = req.body;
+
+  if (!tenantId) {
+    return res.status(400).json({ error: 'Identificador del Tenant no especificado' });
+  }
+
+  if (!title || !dueDate) {
+    return res.status(400).json({ error: 'Título de la tarea y fecha de vencimiento son requeridos' });
+  }
+
+  const leadExists = leads.some(l => l.id === leadId && l.tenantId === tenantId);
+  if (!leadExists) {
+    return res.status(404).json({ error: 'Lead no encontrado' });
+  }
+
+  const newTask: LeadTask = {
+    id: `lt-${Date.now()}`,
+    leadId,
+    title,
+    dueDate,
+    status: 'pending',
+    assignedTo: req.user?.email || 'admin@colegiopremium.edu',
+    createdAt: new Date().toISOString()
+  };
+
+  leadTasks.push(newTask);
+
+  return res.status(201).json(newTask);
+});
+
+// 9. Completar/Pendiente una Tarea de Seguimiento
+app.put('/api/crm/leads/:leadId/tasks/:taskId/toggle', authenticateJWT, (req: AuthenticatedRequest, res: Response) => {
+  const tenantId = getRequestTenantId(req);
+  const { leadId, taskId } = req.params;
+
+  if (!tenantId) {
+    return res.status(400).json({ error: 'Identificador del Tenant no especificado' });
+  }
+
+  const leadExists = leads.some(l => l.id === leadId && l.tenantId === tenantId);
+  if (!leadExists) {
+    return res.status(404).json({ error: 'Lead no encontrado' });
+  }
+
+  const taskIdx = leadTasks.findIndex(t => t.id === taskId && t.leadId === leadId);
+  if (taskIdx === -1) {
+    return res.status(404).json({ error: 'Tarea no encontrada' });
+  }
+
+  const previousStatus = leadTasks[taskIdx].status;
+  leadTasks[taskIdx].status = previousStatus === 'pending' ? 'completed' : 'pending';
+
+  return res.json(leadTasks[taskIdx]);
+});
+
+// 10. Estadísticas Comerciales del Pipeline de Admisiones (Métricas de Conversión)
+app.get('/api/crm/metrics', authenticateJWT, (req: AuthenticatedRequest, res: Response) => {
+  const tenantId = getRequestTenantId(req);
+  if (!tenantId) {
+    return res.status(400).json({ error: 'Identificador del Tenant no especificado' });
+  }
+
+  const tenantLeads = leads.filter(l => l.tenantId === tenantId);
+  const totalLeadsCount = tenantLeads.length;
+
+  // Tasa de conversión: ganados / (ganados + perdidos)
+  const enrolledCount = tenantLeads.filter(l => l.status === 'enrolled').length;
+  const lostCount = tenantLeads.filter(l => l.status === 'lost').length;
+  const totalClosed = enrolledCount + lostCount;
+  const conversionRate = totalClosed > 0 
+    ? parseFloat(((enrolledCount / totalClosed) * 100).toFixed(1))
+    : 0;
+
+  // Pipeline Proyectado (Valor monetario simulado: 2500 USD por cada lead activo)
+  const activeLeadsCount = tenantLeads.filter(l => !['enrolled', 'lost'].includes(l.status)).length;
+  const projectedPipeline = activeLeadsCount * 2500;
+
+  // Distribución por Canal de Origen (Fuentes)
+  const sourcesCount = {
+    web: tenantLeads.filter(l => l.source === 'web').length,
+    referral: tenantLeads.filter(l => l.source === 'referral').length,
+    social_media: tenantLeads.filter(l => l.source === 'social_media').length,
+    walk_in: tenantLeads.filter(l => l.source === 'walk_in').length,
+    phone_call: tenantLeads.filter(l => l.source === 'phone_call').length
+  };
+
+  // Tareas pendientes
+  const tenantLeadsIds = tenantLeads.map(l => l.id);
+  const pendingTasksCount = leadTasks.filter(t => tenantLeadsIds.includes(t.leadId) && t.status === 'pending').length;
+
+  return res.json({
+    totalLeads: totalLeadsCount,
+    conversionRate,
+    projectedPipeline,
+    sourcesDistribution: sourcesCount,
+    pendingTasks: pendingTasksCount,
+    activeLeads: activeLeadsCount
+  });
 });
 
 // INICIAR SERVIDOR

@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.enrollments = exports.students = exports.auditLogs = exports.campuses = exports.professors = exports.courses = exports.users = exports.roleMenuPermissions = exports.roles = exports.menuOptions = exports.tenants = void 0;
+exports.leadTasks = exports.leadActivities = exports.leads = exports.enrollments = exports.students = exports.auditLogs = exports.campuses = exports.professors = exports.courses = exports.users = exports.roleMenuPermissions = exports.roles = exports.menuOptions = exports.tenants = void 0;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 // -------------------------------------------------------------
 // MOCK DATA INITIALIZATION
@@ -40,19 +40,19 @@ exports.tenants = [
 ];
 exports.menuOptions = [
     { id: 'm-1', parentId: null, title: 'Panel de KPIs y Rentabilidad', icon: 'LayoutDashboard', route: '/dashboard', sortOrder: 1, module: 'dashboard', isActive: true },
-    { id: 'm-tenants', parentId: null, title: 'Configuración de Tenants', icon: 'Globe', route: '/dashboard/tenants', sortOrder: 2, module: 'tenants', isActive: true },
-    { id: 'm-config', parentId: null, title: 'Configuración', icon: 'Settings', route: '/dashboard/config', sortOrder: 3, module: 'config', isActive: true },
+    { id: 'm-10', parentId: null, title: 'CRM y Captación de Leads', icon: 'Target', route: '/dashboard/crm', sortOrder: 2, module: 'crm', isActive: true },
+    { id: 'm-4', parentId: null, title: 'Gestión de Sedes (Aulas/Espacios)', icon: 'MapPin', route: '/dashboard/campuses', sortOrder: 3, module: 'sedes', isActive: true },
+    { id: 'm-5', parentId: null, title: 'Expedientes y Matrícula', icon: 'FileText', route: '/dashboard/students', sortOrder: 4, module: 'matriculas', isActive: true },
+    { id: 'm-6', parentId: null, title: 'Calificaciones Académicas', icon: 'Award', route: '/dashboard/grades', sortOrder: 5, module: 'calificaciones', isActive: true },
+    { id: 'm-7', parentId: null, title: 'Procesamiento de Pagos y Cobranzas', icon: 'CreditCard', route: '/dashboard/payments', sortOrder: 6, module: 'pagos', isActive: true },
+    { id: 'm-8', parentId: null, title: 'Programación Predictiva (Inteligencia)', icon: 'CalendarDays', route: '/dashboard/predictive', sortOrder: 7, module: 'predicciones', isActive: true },
+    { id: 'm-9', parentId: null, title: 'Centro de Comunicación', icon: 'MessageSquare', route: '/dashboard/comms', sortOrder: 8, module: 'comunicaciones', isActive: true },
+    { id: 'm-11', parentId: null, title: 'Herramientas Administrativas', icon: 'ShieldAlert', route: '/dashboard/admin', sortOrder: 9, module: 'administracion', isActive: true },
+    { id: 'm-config', parentId: null, title: 'Configuración', icon: 'Settings', route: '/dashboard/config', sortOrder: 10, module: 'config', isActive: true },
     { id: 'm-config-roles', parentId: 'm-config', title: 'Matriz de Roles Dinámicos', icon: 'Shield', route: '/dashboard/config/roles', sortOrder: 1, module: 'config', isActive: true },
     { id: 'm-2', parentId: 'm-config', title: 'Catálogo de Cursos y Oferta', icon: 'BookOpen', route: '/dashboard/courses', sortOrder: 2, module: 'cursos', isActive: true },
     { id: 'm-3', parentId: 'm-config', title: 'Gestión de Facultad (Profesores)', icon: 'Users', route: '/dashboard/professors', sortOrder: 3, module: 'facultad', isActive: true },
-    { id: 'm-4', parentId: null, title: 'Gestión de Sedes (Aulas/Espacios)', icon: 'MapPin', route: '/dashboard/campuses', sortOrder: 4, module: 'sedes', isActive: true },
-    { id: 'm-5', parentId: null, title: 'Expedientes y Matrícula', icon: 'FileText', route: '/dashboard/students', sortOrder: 5, module: 'matriculas', isActive: true },
-    { id: 'm-6', parentId: null, title: 'Calificaciones Académicas', icon: 'Award', route: '/dashboard/grades', sortOrder: 6, module: 'calificaciones', isActive: true },
-    { id: 'm-7', parentId: null, title: 'Procesamiento de Pagos y Cobranzas', icon: 'CreditCard', route: '/dashboard/payments', sortOrder: 7, module: 'pagos', isActive: true },
-    { id: 'm-8', parentId: null, title: 'Programación Predictiva (Inteligencia)', icon: 'CalendarDays', route: '/dashboard/predictive', sortOrder: 8, module: 'predicciones', isActive: true },
-    { id: 'm-9', parentId: null, title: 'Centro de Comunicación', icon: 'MessageSquare', route: '/dashboard/comms', sortOrder: 9, module: 'comunicaciones', isActive: true },
-    { id: 'm-10', parentId: null, title: 'CRM y Captación de Leads', icon: 'Target', route: '/dashboard/crm', sortOrder: 10, module: 'crm', isActive: true },
-    { id: 'm-11', parentId: null, title: 'Herramientas Administrativas', icon: 'ShieldAlert', route: '/dashboard/admin', sortOrder: 11, module: 'administracion', isActive: true }
+    { id: 'm-tenants', parentId: null, title: 'Configuración de Tenants', icon: 'Globe', route: '/dashboard/tenants', sortOrder: 11, module: 'tenants', isActive: true }
 ];
 exports.roles = [
     // Superadmin Global
@@ -502,5 +502,219 @@ exports.enrollments = [
         status: 'dropped',
         createdAt: '2026-03-16T11:00:00Z',
         updatedAt: '2026-04-01T15:30:00Z'
+    }
+];
+// -------------------------------------------------------------
+// CRM SEEDS & MOCK DATA Arrays
+// -------------------------------------------------------------
+exports.leads = [
+    {
+        id: 'ld-1',
+        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        firstName: 'Mateo',
+        lastName: 'Silva',
+        parentName: 'Sofía Silva',
+        email: 'sofia.silva@mail.com',
+        phone: '+51 987 654 321',
+        gradeInterested: 'Primaria 1°',
+        source: 'web',
+        status: 'new',
+        assignedUserId: 'u-admin1',
+        createdAt: '2026-05-20T10:00:00Z',
+        updatedAt: '2026-05-20T10:00:00Z'
+    },
+    {
+        id: 'ld-2',
+        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        firstName: 'Valentina',
+        lastName: 'Rojas',
+        parentName: 'Carlos Rojas',
+        email: 'carlos.rojas@outlook.com',
+        phone: '+51 912 345 678',
+        gradeInterested: 'Secundaria 3°',
+        source: 'social_media',
+        status: 'contacted',
+        assignedUserId: 'u-admin1',
+        createdAt: '2026-05-18T14:30:00Z',
+        updatedAt: '2026-05-19T11:00:00Z'
+    },
+    {
+        id: 'ld-3',
+        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        firstName: 'Thiago',
+        lastName: 'Pinedo',
+        parentName: 'Milagros Pinedo',
+        email: 'milagros@gmail.com',
+        phone: '+51 945 678 123',
+        gradeInterested: 'Primaria 5°',
+        source: 'referral',
+        status: 'tour_scheduled',
+        assignedUserId: 'u-auxiliar1',
+        createdAt: '2026-05-15T09:00:00Z',
+        updatedAt: '2026-05-17T16:20:00Z'
+    },
+    {
+        id: 'ld-4',
+        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        firstName: 'Luciana',
+        lastName: 'Herrera',
+        parentName: 'Daniel Herrera',
+        email: 'dherrera@empresa.pe',
+        phone: '+51 963 852 741',
+        gradeInterested: 'Secundaria 1°',
+        source: 'walk_in',
+        status: 'evaluation',
+        assignedUserId: 'u-admin1',
+        createdAt: '2026-05-12T11:45:00Z',
+        updatedAt: '2026-05-20T14:00:00Z'
+    },
+    {
+        id: 'ld-5',
+        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        firstName: 'Benjamín',
+        lastName: 'Castro',
+        parentName: 'Patricia Castro',
+        email: 'pcastro@hotmail.com',
+        phone: '+51 999 888 777',
+        gradeInterested: 'Primaria 2°',
+        source: 'phone_call',
+        status: 'approved',
+        assignedUserId: 'u-auxiliar1',
+        createdAt: '2026-05-10T10:15:00Z',
+        updatedAt: '2026-05-24T12:00:00Z'
+    },
+    {
+        id: 'ld-6',
+        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        firstName: 'Matías',
+        lastName: 'Bustamante',
+        parentName: 'Jorge Bustamante',
+        email: 'jorge.busta@gmail.com',
+        phone: '+51 911 222 333',
+        gradeInterested: 'Secundaria 5°',
+        source: 'web',
+        status: 'enrolled',
+        assignedUserId: 'u-admin1',
+        createdAt: '2026-05-08T09:00:00Z',
+        updatedAt: '2026-05-25T15:30:00Z'
+    },
+    {
+        id: 'ld-7',
+        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        firstName: 'Camila',
+        lastName: 'Ortiz',
+        parentName: 'Elena Ortiz',
+        email: 'elena.ortiz@yahoo.com',
+        phone: '+51 922 444 666',
+        gradeInterested: 'Primaria 4°',
+        source: 'social_media',
+        status: 'lost',
+        lostReason: 'Precio de matrícula y mensualidad elevados',
+        assignedUserId: 'u-auxiliar1',
+        createdAt: '2026-05-05T14:00:00Z',
+        updatedAt: '2026-05-12T10:00:00Z'
+    }
+];
+exports.leadActivities = [
+    {
+        id: 'la-1',
+        leadId: 'ld-1',
+        type: 'system',
+        summary: 'Lead captado automáticamente',
+        details: 'Prospecto registrado a través del formulario web de admisiones para Primaria 1°.',
+        createdBy: 'Sistema',
+        createdAt: '2026-05-20T10:00:00Z'
+    },
+    {
+        id: 'la-2',
+        leadId: 'ld-2',
+        type: 'system',
+        summary: 'Lead captado vía Redes Sociales',
+        details: 'Prospecto registrado a través de campaña publicitaria en Facebook Ads.',
+        createdBy: 'Sistema',
+        createdAt: '2026-05-18T14:30:00Z'
+    },
+    {
+        id: 'la-3',
+        leadId: 'ld-2',
+        type: 'call',
+        summary: 'Llamada telefónica inicial',
+        details: 'Se contactó a Carlos Rojas. Indica que busca un colegio con fuerte enfoque deportivo y bilingüe. Se agendó enviarle brochure.',
+        createdBy: 'admin@colegiopremium.edu',
+        createdAt: '2026-05-19T11:00:00Z'
+    },
+    {
+        id: 'la-4',
+        leadId: 'ld-3',
+        type: 'system',
+        summary: 'Lead registrado por recomendación',
+        details: 'Registrado por recomendación del exalumno de la promoción 2024.',
+        createdBy: 'auxiliar@colegiopremium.edu',
+        createdAt: '2026-05-15T09:00:00Z'
+    },
+    {
+        id: 'la-5',
+        leadId: 'ld-3',
+        type: 'call',
+        summary: 'Llamada para agendar visita',
+        details: 'Conversación fluida con la madre (Milagros). Agendó visita guiada por las sedes e instalaciones para el jueves a las 4:00 PM.',
+        createdBy: 'auxiliar@colegiopremium.edu',
+        createdAt: '2026-05-17T16:20:00Z'
+    },
+    {
+        id: 'la-6',
+        leadId: 'ld-5',
+        type: 'meeting',
+        summary: 'Visita guiada al campus completada',
+        details: 'El apoderado y el estudiante recorrieron los laboratorios de cómputo, ciencias y robótica. Se mostraron altamente satisfechos con la infraestructura.',
+        createdBy: 'auxiliar@colegiopremium.edu',
+        createdAt: '2026-05-12T15:00:00Z'
+    },
+    {
+        id: 'la-7',
+        leadId: 'ld-5',
+        type: 'evaluation',
+        summary: 'Evaluación académica psicopedagógica',
+        details: 'Estudiante rindió la evaluación cognitiva. Aprobó con rendimiento sobresaliente. Comité aprueba vacante.',
+        createdBy: 'Dpto. Psicopedagógico',
+        createdAt: '2026-05-24T12:00:00Z'
+    }
+];
+exports.leadTasks = [
+    {
+        id: 'lt-1',
+        leadId: 'ld-1',
+        title: 'Llamar a apoderado para calificar interés',
+        dueDate: '2026-06-01',
+        status: 'pending',
+        assignedTo: 'admin@colegiopremium.edu',
+        createdAt: '2026-05-20T10:05:00Z'
+    },
+    {
+        id: 'lt-2',
+        leadId: 'ld-2',
+        title: 'Enviar brochure de precios y vacantes 2026',
+        dueDate: '2026-05-30',
+        status: 'completed',
+        assignedTo: 'admin@colegiopremium.edu',
+        createdAt: '2026-05-19T11:05:00Z'
+    },
+    {
+        id: 'lt-3',
+        leadId: 'ld-3',
+        title: 'Confirmar asistencia a visita guiada presencial',
+        dueDate: '2026-05-29',
+        status: 'pending',
+        assignedTo: 'auxiliar@colegiopremium.edu',
+        createdAt: '2026-05-17T16:25:00Z'
+    },
+    {
+        id: 'lt-4',
+        leadId: 'ld-5',
+        title: 'Enviar carta de aprobación y ficha de pago de matrícula',
+        dueDate: '2026-05-28',
+        status: 'pending',
+        assignedTo: 'auxiliar@colegiopremium.edu',
+        createdAt: '2026-05-24T12:10:00Z'
     }
 ];

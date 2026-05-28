@@ -166,6 +166,29 @@ export default function StudentsPage() {
     }
   }, [token, tenant]);
 
+  // Capturar pre-carga express desde CRM
+  useEffect(() => {
+    if (token && typeof window !== 'undefined') {
+      const preload = sessionStorage.getItem('sincroedu_lead_enroll_preload');
+      if (preload) {
+        try {
+          const data = JSON.parse(preload);
+          setFirstName(data.firstName || '');
+          setLastName(data.lastName || '');
+          setEmail(data.email || '');
+          setPhone(data.phone || '');
+          setDocId(`L-${Math.floor(10000000 + Math.random() * 90000000)}`);
+          
+          setEditMode(false);
+          setIsFormOpen(true);
+          sessionStorage.removeItem('sincroedu_lead_enroll_preload');
+        } catch (err) {
+          console.error('Error preloading lead data:', err);
+        }
+      }
+    }
+  }, [token]);
+
   // Limpiar errores de matrícula al cambiar de curso
   useEffect(() => {
     setMissingPrereqs([]);
