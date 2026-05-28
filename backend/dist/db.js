@@ -1,0 +1,354 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.auditLogs = exports.campuses = exports.professors = exports.courses = exports.users = exports.roleMenuPermissions = exports.roles = exports.menuOptions = exports.tenants = void 0;
+const bcryptjs_1 = __importDefault(require("bcryptjs"));
+// -------------------------------------------------------------
+// MOCK DATA INITIALIZATION
+// -------------------------------------------------------------
+exports.tenants = [
+    {
+        id: 't-11111111-1111-1111-1111-111111111111',
+        name: 'SincroEdu Premium College',
+        subdomain: 'sincroedu-college',
+        logoUrl: '/brand/logo.png',
+        primaryColor: '#6B8E4E',
+        secondaryColor: '#1C2C35',
+        status: 'active',
+    },
+    {
+        id: 't-22222222-2222-2222-2222-222222222222',
+        name: 'Instituto de Ciencias Innovación',
+        subdomain: 'ciencias-innovacion',
+        logoUrl: null,
+        primaryColor: '#2B6CB0',
+        secondaryColor: '#1A202C',
+        status: 'active',
+    }
+];
+exports.menuOptions = [
+    { id: 'm-1', parentId: null, title: 'Panel de KPIs y Rentabilidad', icon: 'LayoutDashboard', route: '/dashboard', sortOrder: 1, module: 'dashboard', isActive: true },
+    { id: 'm-2', parentId: null, title: 'Catálogo de Cursos y Oferta', icon: 'BookOpen', route: '/dashboard/courses', sortOrder: 2, module: 'cursos', isActive: true },
+    { id: 'm-3', parentId: null, title: 'Gestión de Facultad (Profesores)', icon: 'Users', route: '/dashboard/professors', sortOrder: 3, module: 'facultad', isActive: true },
+    { id: 'm-4', parentId: null, title: 'Gestión de Sedes (Aulas/Espacios)', icon: 'MapPin', route: '/dashboard/campuses', sortOrder: 4, module: 'sedes', isActive: true },
+    { id: 'm-5', parentId: null, title: 'Expedientes y Matrícula', icon: 'FileText', route: '/dashboard/students', sortOrder: 5, module: 'matriculas', isActive: true },
+    { id: 'm-6', parentId: null, title: 'Calificaciones Académicas', icon: 'Award', route: '/dashboard/grades', sortOrder: 6, module: 'calificaciones', isActive: true },
+    { id: 'm-7', parentId: null, title: 'Procesamiento de Pagos y Cobranzas', icon: 'CreditCard', route: '/dashboard/payments', sortOrder: 7, module: 'pagos', isActive: true },
+    { id: 'm-8', parentId: null, title: 'Programación Predictiva (Inteligencia)', icon: 'CalendarDays', route: '/dashboard/predictive', sortOrder: 8, module: 'predicciones', isActive: true },
+    { id: 'm-9', parentId: null, title: 'Centro de Comunicación', icon: 'MessageSquare', route: '/dashboard/comms', sortOrder: 9, module: 'comunicaciones', isActive: true },
+    { id: 'm-10', parentId: null, title: 'CRM y Captación de Leads', icon: 'Target', route: '/dashboard/crm', sortOrder: 10, module: 'crm', isActive: true },
+    { id: 'm-11', parentId: null, title: 'Herramientas Administrativas', icon: 'ShieldAlert', route: '/dashboard/admin', sortOrder: 11, module: 'administracion', isActive: true }
+];
+exports.roles = [
+    // Superadmin Global
+    {
+        id: 'r-superadmin',
+        tenantId: null,
+        name: 'Superadmin',
+        description: 'Administrador global del ecosistema SincroEdu.',
+        isSystemRole: true
+    },
+    // Tenant 1: SincroEdu Premium College
+    {
+        id: 'r-tenant1-admin',
+        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        name: 'Admin',
+        description: 'Administrador general del Tenant.',
+        isSystemRole: true
+    },
+    {
+        id: 'r-tenant1-professor',
+        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        name: 'Profesor',
+        description: 'Personal docente con acceso a notas y cursos.',
+        isSystemRole: false
+    },
+    {
+        id: 'r-tenant1-auxiliar',
+        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        name: 'Auxiliar',
+        description: 'Personal administrativo de apoyo.',
+        isSystemRole: false
+    }
+];
+// Generar matriz de permisos dinámicos
+exports.roleMenuPermissions = [];
+// 1. Superadmin tiene acceso a TODO con permisos completos
+exports.menuOptions.forEach(menu => {
+    exports.roleMenuPermissions.push({
+        id: `p-sa-${menu.id}`,
+        roleId: 'r-superadmin',
+        menuOptionId: menu.id,
+        canView: true,
+        canCreate: true,
+        canEdit: true,
+        canDelete: true,
+    });
+});
+// 2. Admin de Tenant 1 tiene acceso a TODO con permisos completos dentro de su Tenant
+exports.menuOptions.forEach(menu => {
+    exports.roleMenuPermissions.push({
+        id: `p-t1a-${menu.id}`,
+        roleId: 'r-tenant1-admin',
+        menuOptionId: menu.id,
+        canView: true,
+        canCreate: true,
+        canEdit: true,
+        canDelete: true,
+    });
+});
+// 3. Profesor de Tenant 1 tiene acceso restringido a algunos módulos
+// Módulos visibles: KPIs/Dashboard (Vista), Cursos (Vista), Facultad (Vista), Expedientes (Vista), Calificaciones (Completo), Comunicación (Completo)
+const profVisibleMenus = ['m-1', 'm-2', 'm-3', 'm-5', 'm-6', 'm-9'];
+exports.menuOptions.forEach(menu => {
+    const isAllowed = profVisibleMenus.includes(menu.id);
+    exports.roleMenuPermissions.push({
+        id: `p-t1p-${menu.id}`,
+        roleId: 'r-tenant1-professor',
+        menuOptionId: menu.id,
+        canView: isAllowed,
+        canCreate: isAllowed && ['m-6', 'm-9'].includes(menu.id), // Sólo crear notas y comunicaciones
+        canEdit: isAllowed && ['m-6', 'm-9'].includes(menu.id),
+        canDelete: false
+    });
+});
+// 4. Auxiliar de Tenant 1 tiene acceso intermedio
+const auxVisibleMenus = ['m-1', 'm-2', 'm-4', 'm-5', 'm-9', 'm-10'];
+exports.menuOptions.forEach(menu => {
+    const isAllowed = auxVisibleMenus.includes(menu.id);
+    exports.roleMenuPermissions.push({
+        id: `p-t1ax-${menu.id}`,
+        roleId: 'r-tenant1-auxiliar',
+        menuOptionId: menu.id,
+        canView: isAllowed,
+        canCreate: isAllowed && ['m-5', 'm-9', 'm-10'].includes(menu.id), // Crear matrículas, mensajes, leads
+        canEdit: isAllowed && ['m-5', 'm-9', 'm-10'].includes(menu.id),
+        canDelete: false
+    });
+});
+// Hash de contraseñas de prueba (sincro123)
+const salt = bcryptjs_1.default.genSaltSync(10);
+const defaultPasswordHash = bcryptjs_1.default.hashSync('sincro123', salt);
+exports.users = [
+    {
+        id: 'u-superadmin',
+        tenantId: null,
+        roleId: 'r-superadmin',
+        email: 'superadmin@sincroedu.com',
+        passwordHash: defaultPasswordHash,
+        firstName: 'Santiago',
+        lastName: 'Delgado',
+        phone: '+51 987 654 321',
+        avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+        isActive: true,
+        lastLogin: null
+    },
+    {
+        id: 'u-t1admin',
+        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        roleId: 'r-tenant1-admin',
+        email: 'admin@colegiopremium.edu',
+        passwordHash: defaultPasswordHash,
+        firstName: 'Patricia',
+        lastName: 'Ruiz',
+        phone: '+51 999 888 777',
+        avatarUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150',
+        isActive: true,
+        lastLogin: null
+    },
+    {
+        id: 'u-t1professor',
+        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        roleId: 'r-tenant1-professor',
+        email: 'profesor@colegiopremium.edu',
+        passwordHash: defaultPasswordHash,
+        firstName: 'Mateo',
+        lastName: 'Silva',
+        phone: '+51 955 444 333',
+        avatarUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150',
+        isActive: true,
+        lastLogin: null
+    },
+    {
+        id: 'u-t1auxiliar',
+        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        roleId: 'r-tenant1-auxiliar',
+        email: 'auxiliar@colegiopremium.edu',
+        passwordHash: defaultPasswordHash,
+        firstName: 'Laura',
+        lastName: 'Vegas',
+        phone: '+51 911 222 333',
+        avatarUrl: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150',
+        isActive: true,
+        lastLogin: null
+    }
+];
+// =====================================================================
+// SEMILLAS DE DATOS CORE (FASE 2)
+// =====================================================================
+exports.courses = [
+    {
+        id: 'c-1',
+        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        code: 'MAT-101',
+        name: 'Álgebra y Trigonometría Avanzada',
+        description: 'Curso fundamental de análisis algebraico, funciones complejas y modelos trigonométricos para ciencias aplicadas.',
+        credits: 5,
+        status: 'active',
+        createdAt: '2026-02-15T08:00:00Z',
+        updatedAt: '2026-02-15T08:00:00Z'
+    },
+    {
+        id: 'c-2',
+        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        code: 'LIT-204',
+        name: 'Literatura Hispanoamericana del Siglo XX',
+        description: 'Estudio crítico de las obras cumbre del boom latinoamericano, análisis lírico y evolución literaria continental.',
+        credits: 4,
+        status: 'active',
+        createdAt: '2026-03-10T09:30:00Z',
+        updatedAt: '2026-05-10T14:20:00Z'
+    },
+    {
+        id: 'c-3',
+        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        code: 'TEC-302',
+        name: 'Programación y Robótica Escolar Integrada',
+        description: 'Taller práctico introductorio a microcontroladores, lógica computacional básica utilizando Python y diseño electromecánico.',
+        credits: 3,
+        status: 'draft',
+        createdAt: '2026-05-20T11:00:00Z',
+        updatedAt: '2026-05-20T11:00:00Z'
+    }
+];
+exports.professors = [
+    {
+        id: 'p-1',
+        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        userId: 'u-t1professor', // Mateo Silva
+        specialty: 'Matemáticas y Ciencias Aplicadas',
+        hireDate: '2024-03-01',
+        status: 'active',
+        createdAt: '2024-03-01T08:00:00Z',
+        updatedAt: '2026-04-12T10:00:00Z'
+    }
+];
+exports.campuses = [
+    {
+        id: 'cp-1',
+        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        name: 'Sede Central San Isidro',
+        address: 'Av. Aurelio Miró Quesada 450, San Isidro',
+        type: 'physical',
+        capacity: 650,
+        status: 'active',
+        createdAt: '2025-01-10T08:00:00Z',
+        updatedAt: '2025-01-10T08:00:00Z'
+    },
+    {
+        id: 'cp-2',
+        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        name: 'Laboratorio de Innovación y Robótica Sur',
+        address: 'Calle Monterrey 340, Surco',
+        type: 'physical',
+        capacity: 120,
+        status: 'maintenance',
+        createdAt: '2025-08-15T09:00:00Z',
+        updatedAt: '2026-05-18T16:45:00Z'
+    },
+    {
+        id: 'cp-3',
+        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        name: 'Campus Virtual Integrado SincroEdu',
+        address: 'https://campus.sincroedu.edu.pe',
+        type: 'virtual',
+        capacity: 5000,
+        status: 'active',
+        createdAt: '2025-03-20T08:00:00Z',
+        updatedAt: '2025-03-20T08:00:00Z'
+    }
+];
+exports.auditLogs = [
+    // Cursos Logs
+    {
+        id: 'al-1',
+        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tableName: 'courses',
+        recordId: 'c-1',
+        action: 'CREATE',
+        changedBy: 'admin@colegiopremium.edu',
+        previousValues: null,
+        newValues: { code: 'MAT-101', name: 'Álgebra y Trigonometría Avanzada', credits: 5, status: 'active' },
+        createdAt: '2026-02-15T08:00:00Z'
+    },
+    {
+        id: 'al-2',
+        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tableName: 'courses',
+        recordId: 'c-2',
+        action: 'CREATE',
+        changedBy: 'admin@colegiopremium.edu',
+        previousValues: null,
+        newValues: { code: 'LIT-204', name: 'Literatura Hispanoamericana', credits: 4, status: 'draft' },
+        createdAt: '2026-03-10T09:30:00Z'
+    },
+    {
+        id: 'al-3',
+        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tableName: 'courses',
+        recordId: 'c-2',
+        action: 'STATUS_CHANGE',
+        changedBy: 'admin@colegiopremium.edu',
+        previousValues: { status: 'draft' },
+        newValues: { status: 'active' },
+        createdAt: '2026-05-10T14:20:00Z'
+    },
+    // Facultad Logs
+    {
+        id: 'al-4',
+        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tableName: 'professors',
+        recordId: 'p-1',
+        action: 'CREATE',
+        changedBy: 'admin@colegiopremium.edu',
+        previousValues: null,
+        newValues: { userId: 'u-t1professor', specialty: 'Matemáticas y Ciencias', status: 'active', hireDate: '2024-03-01' },
+        createdAt: '2024-03-01T08:00:00Z'
+    },
+    {
+        id: 'al-5',
+        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tableName: 'professors',
+        recordId: 'p-1',
+        action: 'UPDATE',
+        changedBy: 'superadmin@sincroedu.com',
+        previousValues: { specialty: 'Matemáticas y Ciencias' },
+        newValues: { specialty: 'Matemáticas y Ciencias Aplicadas' },
+        createdAt: '2026-04-12T10:00:00Z'
+    },
+    // Sedes Logs
+    {
+        id: 'al-6',
+        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tableName: 'campuses',
+        recordId: 'cp-2',
+        action: 'CREATE',
+        changedBy: 'admin@colegiopremium.edu',
+        previousValues: null,
+        newValues: { name: 'Pabellón Sur Robótica', type: 'physical', capacity: 120, status: 'active' },
+        createdAt: '2025-08-15T09:00:00Z'
+    },
+    {
+        id: 'al-7',
+        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tableName: 'campuses',
+        recordId: 'cp-2',
+        action: 'STATUS_CHANGE',
+        changedBy: 'admin@colegiopremium.edu',
+        previousValues: { status: 'active' },
+        newValues: { status: 'maintenance' },
+        createdAt: '2026-05-18T16:45:00Z'
+    }
+];
