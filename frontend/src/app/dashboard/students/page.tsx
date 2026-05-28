@@ -1,5 +1,7 @@
 'use client';
 
+import { getApiUrl } from '@/lib/config';
+
 import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '@/store/useAuthStore';
 import DataTable, { Column } from '@/components/ui/data-table';
@@ -121,7 +123,7 @@ export default function StudentsPage() {
     if (!token) return;
     setLoading(true);
     try {
-      const res = await fetch(`http://localhost:4000/api/tenants/${activeTenantId}/students`, {
+      const res = await fetch(`${getApiUrl()}/tenants/${activeTenantId}/students`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
@@ -140,7 +142,7 @@ export default function StudentsPage() {
     const activeTenantId = tenant?.id || 't-11111111-1111-1111-1111-111111111111';
     if (!token) return;
     try {
-      const res = await fetch(`http://localhost:4000/api/tenants/${activeTenantId}/courses`, {
+      const res = await fetch(`${getApiUrl()}/tenants/${activeTenantId}/courses`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
@@ -166,7 +168,7 @@ export default function StudentsPage() {
     if (!token) return;
     setEnrollmentsLoading(true);
     try {
-      const res = await fetch(`http://localhost:4000/api/tenants/${activeTenantId}/students/${student.id}/enrollments`, {
+      const res = await fetch(`${getApiUrl()}/tenants/${activeTenantId}/students/${student.id}/enrollments`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
@@ -187,7 +189,7 @@ export default function StudentsPage() {
     const activeTenantId = tenant?.id || 't-11111111-1111-1111-1111-111111111111';
     if (!token) return;
     try {
-      const res = await fetch(`http://localhost:4000/api/tenants/${activeTenantId}/students/${student.id}/history`, {
+      const res = await fetch(`${getApiUrl()}/tenants/${activeTenantId}/students/${student.id}/history`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
@@ -258,8 +260,8 @@ export default function StudentsPage() {
     }
 
     const url = editMode 
-      ? `http://localhost:4000/api/tenants/${activeTenantId}/students/${selectedStudent?.id}`
-      : `http://localhost:4000/api/tenants/${activeTenantId}/students`;
+      ? `${getApiUrl()}/tenants/${activeTenantId}/students/${selectedStudent?.id}`
+      : `${getApiUrl()}/tenants/${activeTenantId}/students`;
     
     const method = editMode ? 'PUT' : 'POST';
     const body = editMode 
@@ -294,7 +296,7 @@ export default function StudentsPage() {
     const activeTenantId = tenant?.id || 't-11111111-1111-1111-1111-111111111111';
     if (!token) return;
     try {
-      const res = await fetch(`http://localhost:4000/api/tenants/${activeTenantId}/students/${student.id}/status`, {
+      const res = await fetch(`${getApiUrl()}/tenants/${activeTenantId}/students/${student.id}/status`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -321,7 +323,7 @@ export default function StudentsPage() {
     if (!token) return;
 
     try {
-      const res = await fetch(`http://localhost:4000/api/tenants/${activeTenantId}/students/${selectedStudent.id}/enrollments`, {
+      const res = await fetch(`${getApiUrl()}/tenants/${activeTenantId}/students/${selectedStudent.id}/enrollments`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -352,7 +354,7 @@ export default function StudentsPage() {
     if (!confirmDrop) return;
 
     try {
-      const res = await fetch(`http://localhost:4000/api/tenants/${activeTenantId}/students/${selectedStudent.id}/enrollments/${enrollmentId}`, {
+      const res = await fetch(`${getApiUrl()}/tenants/${activeTenantId}/students/${selectedStudent.id}/enrollments/${enrollmentId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });

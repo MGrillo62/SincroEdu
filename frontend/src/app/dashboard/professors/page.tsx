@@ -1,5 +1,7 @@
 'use client';
 
+import { getApiUrl } from '@/lib/config';
+
 import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '@/store/useAuthStore';
 import DataTable, { Column } from '@/components/ui/data-table';
@@ -72,7 +74,7 @@ export default function ProfessorsPage() {
     if (!token) return;
     setLoading(true);
     try {
-      const res = await fetch(`http://localhost:4000/api/tenants/${activeTenantId}/professors`, {
+      const res = await fetch(`${getApiUrl()}/tenants/${activeTenantId}/professors`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -96,7 +98,7 @@ export default function ProfessorsPage() {
       // Usaremos la sesión del store o simulamos los usuarios disponibles
       // En nuestro db.ts creamos: Mateo Silva, Laura Vegas, Patricia Ruiz, etc.
       // Vamos a mapear los usuarios del Tenant 1 para poder asociarlos a profesor
-      const res = await fetch(`http://localhost:4000/api/auth/me`, {
+      const res = await fetch(`${getApiUrl()}/auth/me`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       // Simulamos la lista basada en los usuarios de prueba guardados en el mock
@@ -136,7 +138,7 @@ export default function ProfessorsPage() {
     const activeTenantId = tenant?.id || 't-11111111-1111-1111-1111-111111111111';
     if (!token) return;
     try {
-      const res = await fetch(`http://localhost:4000/api/tenants/${activeTenantId}/professors/${prof.id}/history`, {
+      const res = await fetch(`${getApiUrl()}/tenants/${activeTenantId}/professors/${prof.id}/history`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -177,8 +179,8 @@ export default function ProfessorsPage() {
     if (!token) return;
 
     const url = editMode 
-      ? `http://localhost:4000/api/tenants/${activeTenantId}/professors/${selectedProf?.id}`
-      : `http://localhost:4000/api/tenants/${activeTenantId}/professors`;
+      ? `${getApiUrl()}/tenants/${activeTenantId}/professors/${selectedProf?.id}`
+      : `${getApiUrl()}/tenants/${activeTenantId}/professors`;
     
     const method = editMode ? 'PUT' : 'POST';
     const body = editMode 
@@ -213,7 +215,7 @@ export default function ProfessorsPage() {
     const activeTenantId = tenant?.id || 't-11111111-1111-1111-1111-111111111111';
     if (!token) return;
     try {
-      const res = await fetch(`http://localhost:4000/api/tenants/${activeTenantId}/professors/${prof.id}/status`, {
+      const res = await fetch(`${getApiUrl()}/tenants/${activeTenantId}/professors/${prof.id}/status`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',

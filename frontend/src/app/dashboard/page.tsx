@@ -1,5 +1,7 @@
 'use client';
 
+import { getApiUrl } from '@/lib/config';
+
 import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { 
@@ -58,7 +60,7 @@ export default function DashboardPage() {
     if (!token || !tenant) return;
     setLoadingRoles(true);
     try {
-      const res = await fetch(`http://localhost:4000/api/tenants/${tenant.id}/roles`, {
+      const res = await fetch(`${getApiUrl()}/tenants/${tenant.id}/roles`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -83,7 +85,7 @@ export default function DashboardPage() {
   const fetchPermissions = async (roleId: string) => {
     if (!token || !tenant || !roleId) return;
     try {
-      const res = await fetch(`http://localhost:4000/api/tenants/${tenant.id}/roles/${roleId}/permissions`, {
+      const res = await fetch(`${getApiUrl()}/tenants/${tenant.id}/roles/${roleId}/permissions`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -132,7 +134,7 @@ export default function DashboardPage() {
     setSavingPermissions(true);
     setSaveMessage(null);
     try {
-      const res = await fetch(`http://localhost:4000/api/tenants/${tenant.id}/roles/${selectedRoleId}/permissions`, {
+      const res = await fetch(`${getApiUrl()}/tenants/${tenant.id}/roles/${selectedRoleId}/permissions`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -165,7 +167,7 @@ export default function DashboardPage() {
     if (!newRoleName.trim() || !token || !tenant) return;
     
     try {
-      const res = await fetch(`http://localhost:4000/api/tenants/${tenant.id}/roles`, {
+      const res = await fetch(`${getApiUrl()}/tenants/${tenant.id}/roles`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

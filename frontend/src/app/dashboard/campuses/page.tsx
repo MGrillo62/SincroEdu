@@ -1,5 +1,7 @@
 'use client';
 
+import { getApiUrl } from '@/lib/config';
+
 import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '@/store/useAuthStore';
 import DataTable, { Column } from '@/components/ui/data-table';
@@ -65,7 +67,7 @@ export default function CampusesPage() {
     if (!token) return;
     setLoading(true);
     try {
-      const res = await fetch(`http://localhost:4000/api/tenants/${activeTenantId}/campuses`, {
+      const res = await fetch(`${getApiUrl()}/tenants/${activeTenantId}/campuses`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -104,7 +106,7 @@ export default function CampusesPage() {
     const activeTenantId = tenant?.id || 't-11111111-1111-1111-1111-111111111111';
     if (!token) return;
     try {
-      const res = await fetch(`http://localhost:4000/api/tenants/${activeTenantId}/campuses/${campus.id}/history`, {
+      const res = await fetch(`${getApiUrl()}/tenants/${activeTenantId}/campuses/${campus.id}/history`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -147,8 +149,8 @@ export default function CampusesPage() {
     if (!token) return;
 
     const url = editMode 
-      ? `http://localhost:4000/api/tenants/${activeTenantId}/campuses/${selectedCampus?.id}`
-      : `http://localhost:4000/api/tenants/${activeTenantId}/campuses`;
+      ? `${getApiUrl()}/tenants/${activeTenantId}/campuses/${selectedCampus?.id}`
+      : `${getApiUrl()}/tenants/${activeTenantId}/campuses`;
     
     const method = editMode ? 'PUT' : 'POST';
     const body = editMode 
@@ -183,7 +185,7 @@ export default function CampusesPage() {
     const activeTenantId = tenant?.id || 't-11111111-1111-1111-1111-111111111111';
     if (!token) return;
     try {
-      const res = await fetch(`http://localhost:4000/api/tenants/${activeTenantId}/campuses/${campus.id}/status`, {
+      const res = await fetch(`${getApiUrl()}/tenants/${activeTenantId}/campuses/${campus.id}/status`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',

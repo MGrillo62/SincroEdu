@@ -53,7 +53,9 @@ interface AuthState {
   clearError: () => void;
 }
 
-const API_URL = 'http://localhost:4000/api';
+import { getApiUrl } from '@/lib/config';
+
+const API_URL = getApiUrl();
 
 export const useAuthStore = create<AuthState>((set) => ({
   token: typeof window !== 'undefined' ? localStorage.getItem('sincroedu_token') : null,

@@ -1,5 +1,7 @@
 'use client';
 
+import { getApiUrl } from '@/lib/config';
+
 import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '@/store/useAuthStore';
 import DataTable, { Column } from '@/components/ui/data-table';
@@ -64,7 +66,7 @@ export default function CoursesPage() {
     if (!token) return;
     setLoading(true);
     try {
-      const res = await fetch(`http://localhost:4000/api/tenants/${activeTenantId}/courses`, {
+      const res = await fetch(`${getApiUrl()}/tenants/${activeTenantId}/courses`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -103,7 +105,7 @@ export default function CoursesPage() {
     const activeTenantId = tenant?.id || 't-11111111-1111-1111-1111-111111111111';
     if (!token) return;
     try {
-      const res = await fetch(`http://localhost:4000/api/tenants/${activeTenantId}/courses/${course.id}/history`, {
+      const res = await fetch(`${getApiUrl()}/tenants/${activeTenantId}/courses/${course.id}/history`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -147,8 +149,8 @@ export default function CoursesPage() {
     if (!token) return;
 
     const url = editMode 
-      ? `http://localhost:4000/api/tenants/${activeTenantId}/courses/${selectedCourse?.id}`
-      : `http://localhost:4000/api/tenants/${activeTenantId}/courses`;
+      ? `${getApiUrl()}/tenants/${activeTenantId}/courses/${selectedCourse?.id}`
+      : `${getApiUrl()}/tenants/${activeTenantId}/courses`;
     
     const method = editMode ? 'PUT' : 'POST';
     const body = editMode 
@@ -183,7 +185,7 @@ export default function CoursesPage() {
     const activeTenantId = tenant?.id || 't-11111111-1111-1111-1111-111111111111';
     if (!token) return;
     try {
-      const res = await fetch(`http://localhost:4000/api/tenants/${activeTenantId}/courses/${course.id}/status`, {
+      const res = await fetch(`${getApiUrl()}/tenants/${activeTenantId}/courses/${course.id}/status`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
