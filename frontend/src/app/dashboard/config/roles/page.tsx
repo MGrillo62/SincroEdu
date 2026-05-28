@@ -47,12 +47,42 @@ export default function RolesConfigPage() {
   const [savingPermissions, setSavingPermissions] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
+  // Estados exclusivos para Superadmin
+  const [tenantsList, setTenantsList] = useState<any[]>([]);
+  const [selectedTenantId, setSelectedTenantId] = useState<string>('');
+
+  // Cargar lista de Tenants si es Superadmin
+  useEffect(() => {
+    if (token && user?.roleId === 'r-superadmin') {
+      const fetchTenants = async () => {
+        try {
+          const res = await fetch(`${getApiUrl()}/tenants`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          const data = await res.json();
+          if (res.ok && data.length > 0) {
+            setTenantsList(data);
+            setSelectedTenantId(data[0].id);
+          }
+        } catch (err) {
+          console.error('Error fetching tenants list:', err);
+        }
+      };
+      fetchTenants();
+    }
+  }, [token, user]);
+
+  // Resolutor dinámico del ID de Tenant activo
+  const activeTenantId = user?.roleId === 'r-superadmin' 
+    ? selectedTenantId 
+    : tenant?.id;
+
   // Obtener roles al iniciar sesión o cambio de tenant
   const fetchRoles = async () => {
-    if (!token || !tenant) return;
+    if (!token || !activeTenantId) return;
     setLoadingRoles(true);
     try {
-      const res = await fetch(`${getApiUrl()}/tenants/${tenant.id}/roles`, {
+      const res = await fetch(`${getApiUrl()}/tenants/${activeTenantId}/roles`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -64,6 +94,8 @@ export default function RolesConfigPage() {
         const firstEditableRole = data.find((r: RoleOption) => !r.isSystemRole) || data[0];
         if (firstEditableRole) {
           setSelectedRoleId(firstEditableRole.id);
+        } else {
+          setSelectedRoleId('');
         }
       }
     } catch (err) {
@@ -75,9 +107,9 @@ export default function RolesConfigPage() {
 
   // Obtener permisos del rol seleccionado
   const fetchPermissions = async (roleId: string) => {
-    if (!token || !tenant || !roleId) return;
+    if (!token || !activeTenantId || !roleId) return;
     try {
-      const res = await fetch(`${getApiUrl()}/tenants/${tenant.id}/roles/${roleId}/permissions`, {
+      const res = await fetch(`${getApiUrl()}/tenants/${activeTenantId}/roles/${roleId}/permissions`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -92,14 +124,20 @@ export default function RolesConfigPage() {
   };
 
   useEffect(() => {
-    if (token && tenant) {
+    if (token && activeTenantId) {
       fetchRoles();
+    } else {
+      setRolesList([]);
+      setSelectedRoleId('');
+      setPermissionsConfig([]);
     }
-  }, [token, tenant]);
+  }, [token, activeTenantId]);
 
   useEffect(() => {
     if (selectedRoleId) {
       fetchPermissions(selectedRoleId);
+    } else {
+      setPermissionsConfig([]);
     }
   }, [selectedRoleId]);
 
@@ -124,11 +162,11 @@ export default function RolesConfigPage() {
 
   // Guardar permisos editados en la API
   const handleSavePermissions = async () => {
-    if (!token || !tenant || !selectedRoleId) return;
+    if (!token || !activeTenantId || !selectedRoleId) return;
     setSavingPermissions(true);
     setSaveMessage(null);
     try {
-      const res = await fetch(`${getApiUrl()}/tenants/${tenant.id}/roles/${selectedRoleId}/permissions`, {
+      const res = await fetch(`${getApiUrl()}/tenants/${activeTenantId}/roles/${selectedRoleId}/permissions`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -158,10 +196,10 @@ export default function RolesConfigPage() {
   // Crear un nuevo rol
   const handleCreateRole = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newRoleName.trim() || !token || !tenant) return;
+    if (!newRoleName.trim() || !token || !activeTenantId) return;
     
     try {
-      const res = await fetch(`${getApiUrl()}/tenants/${tenant.id}/roles`, {
+      const res = await fetch(`${getApiUrl()}/tenants/${activeTenantId}/roles`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -191,11 +229,35 @@ export default function RolesConfigPage() {
   };
 
   // Color primario de acento dinámico según el Tenant
-  const activeColor = tenant?.primaryColor || '#6B8E4E';
+  const activeColor = user?.roleId === 'r-superadmin'
+    ? (tenantsList.find(t => t.id === selectedTenantId)?.primaryColor || '#6B8E4E')
+    : (tenant?.primaryColor || '#6B8E4E');
 
   return (
     <div className="space-y-6">
       
+      {/* SECTOR EXCLUSIVO SUPERADMIN: SELECCIONAR ESCUELA */}
+      {user?.roleId === 'r-superadmin' && tenantsList.length > 0 && (
+        <div className="bg-slate-50 border border-slate-200 p-4.5 rounded-3xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 animate-fade-in shadow-inner">
+          <div className="space-y-0.5">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Consola Global de Superadmin</span>
+            <span className="text-xs font-bold text-[#1C2C35]">Selecciona qué institución deseas configurar curricular y operativamente:</span>
+          </div>
+          <select
+            value={selectedTenantId}
+            onChange={e => {
+              setSelectedTenantId(e.target.value);
+              setSaveMessage(null);
+            }}
+            className="w-full sm:w-72 px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-black text-[#1C2C35] bg-white focus:outline-none focus:border-[#6B8E4E] shadow-sm cursor-pointer"
+          >
+            {tenantsList.map(t => (
+              <option key={t.id} value={t.id}>{t.name} ({t.subdomain})</option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {/* 1. SECCIÓN DE ENCABEZADO */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
         <div className="flex items-center gap-3">
