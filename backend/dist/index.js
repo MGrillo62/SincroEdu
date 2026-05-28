@@ -180,6 +180,137 @@ app.get('/api/auth/me', authenticateJWT, (req, res) => {
         menuAccess
     });
 });
+// ============================================================================
+// CONSOLA DE TENANTS (SÓLO SUPERADMIN GLOBAL)
+// ============================================================================
+// 1. Obtener todos los Tenants (escuelas)
+app.get('/api/tenants', authenticateJWT, (req, res) => {
+    if (req.user?.roleId !== 'r-superadmin') {
+        return res.status(403).json({ error: 'Acceso denegado: Se requieren privilegios de Superadmin' });
+    }
+    return res.json(db_1.tenants);
+});
+// 2. Registrar nuevo Tenant (escuela) con auto-semillado de roles y permisos
+app.post('/api/tenants', authenticateJWT, (req, res) => {
+    if (req.user?.roleId !== 'r-superadmin') {
+        return res.status(403).json({ error: 'Acceso denegado: Se requieren privilegios de Superadmin' });
+    }
+    const { name, subdomain, logoUrl, primaryColor, secondaryColor, status, fiscalId, address, phone, email, domain } = req.body;
+    if (!name || !subdomain) {
+        return res.status(400).json({ error: 'Nombre de escuela y subdominio son obligatorios' });
+    }
+    // Verificar si ya existe el subdominio
+    const subExists = db_1.tenants.some(t => t.subdomain.toLowerCase() === subdomain.toLowerCase());
+    if (subExists) {
+        return res.status(409).json({ error: 'El subdominio ya se encuentra registrado' });
+    }
+    const newTenantId = `t-${Date.now()}`;
+    const newTenant = {
+        id: newTenantId,
+        name,
+        subdomain,
+        logoUrl: logoUrl || null,
+        primaryColor: primaryColor || '#6B8E4E',
+        secondaryColor: secondaryColor || '#1C2C35',
+        status: status || 'active',
+        fiscalId: fiscalId || '',
+        address: address || '',
+        phone: phone || '',
+        email: email || '',
+        domain: domain || `${subdomain}.sincroedu.edu.pe`
+    };
+    db_1.tenants.push(newTenant);
+    // Auto-creación de roles predeterminados para el nuevo Tenant
+    const newAdminRoleId = `r-${newTenantId}-admin`;
+    const newProfRoleId = `r-${newTenantId}-professor`;
+    const newAuxRoleId = `r-${newTenantId}-auxiliar`;
+    db_1.roles.push({
+        id: newAdminRoleId,
+        tenantId: newTenantId,
+        name: 'Admin',
+        description: 'Administrador general de la escuela.',
+        isSystemRole: true
+    }, {
+        id: newProfRoleId,
+        tenantId: newTenantId,
+        name: 'Profesor',
+        description: 'Personal docente de la escuela.',
+        isSystemRole: false
+    }, {
+        id: newAuxRoleId,
+        tenantId: newTenantId,
+        name: 'Auxiliar',
+        description: 'Personal de apoyo administrativo.',
+        isSystemRole: false
+    });
+    // Auto-seeding de permisos de menú para el Admin del nuevo Tenant (acceso a todo excepto m-tenants)
+    db_1.menuOptions.forEach(menu => {
+        const isTenantsMenu = menu.id === 'm-tenants';
+        db_1.roleMenuPermissions.push({
+            id: `p-${newTenantId}-admin-${menu.id}`,
+            roleId: newAdminRoleId,
+            menuOptionId: menu.id,
+            canView: !isTenantsMenu,
+            canCreate: !isTenantsMenu,
+            canEdit: !isTenantsMenu,
+            canDelete: !isTenantsMenu
+        });
+    });
+    // Auto-seeding de permisos para Profesor del nuevo Tenant
+    const profVisibleMenus = ['m-1', 'm-config', 'm-2', 'm-3', 'm-5', 'm-6', 'm-9'];
+    db_1.menuOptions.forEach(menu => {
+        const isAllowed = profVisibleMenus.includes(menu.id);
+        db_1.roleMenuPermissions.push({
+            id: `p-${newTenantId}-prof-${menu.id}`,
+            roleId: newProfRoleId,
+            menuOptionId: menu.id,
+            canView: isAllowed,
+            canCreate: isAllowed && ['m-6', 'm-9'].includes(menu.id),
+            canEdit: isAllowed && ['m-6', 'm-9'].includes(menu.id),
+            canDelete: false
+        });
+    });
+    // Registrar Auditoría Global
+    addAuditLog('system', 'tenants', newTenantId, 'CREATE', req.user?.email || 'superadmin@sincroedu.com', null, newTenant);
+    return res.status(201).json(newTenant);
+});
+// 3. Modificar/Actualizar ficha de Tenant
+app.put('/api/tenants/:tenantId', authenticateJWT, (req, res) => {
+    if (req.user?.roleId !== 'r-superadmin') {
+        return res.status(403).json({ error: 'Acceso denegado: Se requieren privilegios de Superadmin' });
+    }
+    const { tenantId } = req.params;
+    const { name, logoUrl, primaryColor, secondaryColor, status, fiscalId, address, phone, email, domain } = req.body;
+    const tenantIdx = db_1.tenants.findIndex(t => t.id === tenantId);
+    if (tenantIdx === -1) {
+        return res.status(404).json({ error: 'Tenant no encontrado' });
+    }
+    const previousTenant = { ...db_1.tenants[tenantIdx] };
+    if (name)
+        db_1.tenants[tenantIdx].name = name;
+    if (logoUrl !== undefined)
+        db_1.tenants[tenantIdx].logoUrl = logoUrl;
+    if (primaryColor)
+        db_1.tenants[tenantIdx].primaryColor = primaryColor;
+    if (secondaryColor)
+        db_1.tenants[tenantIdx].secondaryColor = secondaryColor;
+    if (status)
+        db_1.tenants[tenantIdx].status = status;
+    if (fiscalId !== undefined)
+        db_1.tenants[tenantIdx].fiscalId = fiscalId;
+    if (address !== undefined)
+        db_1.tenants[tenantIdx].address = address;
+    if (phone !== undefined)
+        db_1.tenants[tenantIdx].phone = phone;
+    if (email !== undefined)
+        db_1.tenants[tenantIdx].email = email;
+    if (domain !== undefined)
+        db_1.tenants[tenantIdx].domain = domain;
+    const updatedTenant = db_1.tenants[tenantIdx];
+    // Registrar Auditoría Global
+    addAuditLog('system', 'tenants', tenantId, 'UPDATE', req.user?.email || 'superadmin@sincroedu.com', previousTenant, updatedTenant);
+    return res.json(updatedTenant);
+});
 // 3. OBTENER TODOS LOS ROLES DE UN TENANT
 app.get('/api/tenants/:tenantId/roles', authenticateJWT, (req, res) => {
     const { tenantId } = req.params;

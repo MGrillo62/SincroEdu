@@ -8,6 +8,11 @@ export interface Tenant {
   primaryColor: string;
   secondaryColor: string;
   status: 'active' | 'suspended' | 'trial';
+  fiscalId?: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  domain?: string;
 }
 
 export interface MenuOption {
@@ -68,6 +73,11 @@ export const tenants: Tenant[] = [
     primaryColor: '#6B8E4E',
     secondaryColor: '#1C2C35',
     status: 'active',
+    fiscalId: '20601234567',
+    address: 'Av. Aurelio Miró Quesada 450, San Isidro, Lima',
+    phone: '+51 1 615-5800',
+    email: 'contacto@colegiopremium.edu',
+    domain: 'colegiopremium.edu'
   },
   {
     id: 't-22222222-2222-2222-2222-222222222222',
@@ -77,13 +87,21 @@ export const tenants: Tenant[] = [
     primaryColor: '#2B6CB0',
     secondaryColor: '#1A202C',
     status: 'active',
+    fiscalId: '20609876543',
+    address: 'Calle Monterrey 340, Santiago de Surco, Lima',
+    phone: '+51 1 712-4000',
+    email: 'admision@ciencias.edu.pe',
+    domain: 'ciencias.edu.pe'
   }
 ];
 
 export const menuOptions: MenuOption[] = [
   { id: 'm-1', parentId: null, title: 'Panel de KPIs y Rentabilidad', icon: 'LayoutDashboard', route: '/dashboard', sortOrder: 1, module: 'dashboard', isActive: true },
-  { id: 'm-2', parentId: null, title: 'Catálogo de Cursos y Oferta', icon: 'BookOpen', route: '/dashboard/courses', sortOrder: 2, module: 'cursos', isActive: true },
-  { id: 'm-3', parentId: null, title: 'Gestión de Facultad (Profesores)', icon: 'Users', route: '/dashboard/professors', sortOrder: 3, module: 'facultad', isActive: true },
+  { id: 'm-tenants', parentId: null, title: 'Configuración de Tenants', icon: 'Globe', route: '/dashboard/tenants', sortOrder: 2, module: 'tenants', isActive: true },
+  { id: 'm-config', parentId: null, title: 'Configuración', icon: 'Settings', route: '/dashboard/config', sortOrder: 3, module: 'config', isActive: true },
+  { id: 'm-config-roles', parentId: 'm-config', title: 'Matriz de Roles Dinámicos', icon: 'Shield', route: '/dashboard/config/roles', sortOrder: 1, module: 'config', isActive: true },
+  { id: 'm-2', parentId: 'm-config', title: 'Catálogo de Cursos y Oferta', icon: 'BookOpen', route: '/dashboard/courses', sortOrder: 2, module: 'cursos', isActive: true },
+  { id: 'm-3', parentId: 'm-config', title: 'Gestión de Facultad (Profesores)', icon: 'Users', route: '/dashboard/professors', sortOrder: 3, module: 'facultad', isActive: true },
   { id: 'm-4', parentId: null, title: 'Gestión de Sedes (Aulas/Espacios)', icon: 'MapPin', route: '/dashboard/campuses', sortOrder: 4, module: 'sedes', isActive: true },
   { id: 'm-5', parentId: null, title: 'Expedientes y Matrícula', icon: 'FileText', route: '/dashboard/students', sortOrder: 5, module: 'matriculas', isActive: true },
   { id: 'm-6', parentId: null, title: 'Calificaciones Académicas', icon: 'Award', route: '/dashboard/grades', sortOrder: 6, module: 'calificaciones', isActive: true },
@@ -143,22 +161,23 @@ menuOptions.forEach(menu => {
   });
 });
 
-// 2. Admin de Tenant 1 tiene acceso a TODO con permisos completos dentro de su Tenant
+// 2. Admin de Tenant 1 tiene acceso a TODO con permisos completos dentro de su Tenant, excepto Configuración de Tenants
 menuOptions.forEach(menu => {
+  const isTenantsMenu = menu.id === 'm-tenants';
   roleMenuPermissions.push({
     id: `p-t1a-${menu.id}`,
     roleId: 'r-tenant1-admin',
     menuOptionId: menu.id,
-    canView: true,
-    canCreate: true,
-    canEdit: true,
-    canDelete: true,
+    canView: !isTenantsMenu,
+    canCreate: !isTenantsMenu,
+    canEdit: !isTenantsMenu,
+    canDelete: !isTenantsMenu,
   });
 });
 
 // 3. Profesor de Tenant 1 tiene acceso restringido a algunos módulos
-// Módulos visibles: KPIs/Dashboard (Vista), Cursos (Vista), Facultad (Vista), Expedientes (Vista), Calificaciones (Completo), Comunicación (Completo)
-const profVisibleMenus = ['m-1', 'm-2', 'm-3', 'm-5', 'm-6', 'm-9'];
+// Módulos visibles: KPIs/Dashboard (Vista), Carpeta de Configuración (Vista), Cursos (Vista), Facultad (Vista), Expedientes (Vista), Calificaciones (Completo), Comunicación (Completo)
+const profVisibleMenus = ['m-1', 'm-config', 'm-2', 'm-3', 'm-5', 'm-6', 'm-9'];
 menuOptions.forEach(menu => {
   const isAllowed = profVisibleMenus.includes(menu.id);
   roleMenuPermissions.push({
@@ -173,7 +192,7 @@ menuOptions.forEach(menu => {
 });
 
 // 4. Auxiliar de Tenant 1 tiene acceso intermedio
-const auxVisibleMenus = ['m-1', 'm-2', 'm-4', 'm-5', 'm-9', 'm-10'];
+const auxVisibleMenus = ['m-1', 'm-config', 'm-2', 'm-4', 'm-5', 'm-9', 'm-10'];
 menuOptions.forEach(menu => {
   const isAllowed = auxVisibleMenus.includes(menu.id);
   roleMenuPermissions.push({
