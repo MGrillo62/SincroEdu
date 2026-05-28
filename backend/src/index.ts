@@ -1038,6 +1038,33 @@ app.post('/api/tenants/:tenantId/students/:studentId/enrollments', authenticateJ
     return res.status(409).json({ error: 'El estudiante ya se encuentra matriculado activamente en este curso para el periodo actual' });
   }
 
+  // VALIDACIÓN DE PRERREQUISITOS ACADÉMICOS
+  if (courseExists.prerequisites && Array.isArray(courseExists.prerequisites) && courseExists.prerequisites.length > 0) {
+    const missingPrerequisites: { id: string; code: string; name: string }[] = [];
+    
+    courseExists.prerequisites.forEach(prereqId => {
+      const isApproved = enrollments.some(
+        e => e.studentId === studentId && e.courseId === prereqId && e.status === 'completed'
+      );
+      
+      if (!isApproved) {
+        const prereqCourse = courses.find(c => c.id === prereqId);
+        missingPrerequisites.push({
+          id: prereqId,
+          code: prereqCourse ? prereqCourse.code : 'N/A',
+          name: prereqCourse ? prereqCourse.name : 'Curso Prerrequisito Requerido'
+        });
+      }
+    });
+    
+    if (missingPrerequisites.length > 0) {
+      return res.status(400).json({
+        error: 'Requisitos académicos no cumplidos',
+        missingPrerequisites
+      });
+    }
+  }
+
   const newEnrollment: Enrollment = {
     id: `en-${Date.now()}`,
     tenantId,

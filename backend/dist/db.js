@@ -197,6 +197,7 @@ exports.courses = [
         description: 'Curso fundamental de análisis algebraico, funciones complejas y modelos trigonométricos para ciencias aplicadas.',
         credits: 5,
         status: 'active',
+        prerequisites: [],
         createdAt: '2026-02-15T08:00:00Z',
         updatedAt: '2026-02-15T08:00:00Z'
     },
@@ -208,6 +209,7 @@ exports.courses = [
         description: 'Estudio crítico de las obras cumbre del boom latinoamericano, análisis lírico y evolución literaria continental.',
         credits: 4,
         status: 'active',
+        prerequisites: [],
         createdAt: '2026-03-10T09:30:00Z',
         updatedAt: '2026-05-10T14:20:00Z'
     },
@@ -218,9 +220,34 @@ exports.courses = [
         name: 'Programación y Robótica Escolar Integrada',
         description: 'Taller práctico introductorio a microcontroladores, lógica computacional básica utilizando Python y diseño electromecánico.',
         credits: 3,
-        status: 'draft',
+        status: 'active', // Cambiar a activo para poder usarlo como prerrequisito
+        prerequisites: [],
         createdAt: '2026-05-20T11:00:00Z',
         updatedAt: '2026-05-20T11:00:00Z'
+    },
+    {
+        id: 'c-4',
+        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        code: 'MAT-201',
+        name: 'Cálculo Avanzado y Análisis Real',
+        description: 'Estudio de límites, derivadas complejas, integrales múltiples y análisis de series matemáticas para ingeniería.',
+        credits: 5,
+        status: 'active',
+        prerequisites: ['c-1'], // Requiere Álgebra (c-1)
+        createdAt: '2026-05-27T08:00:00Z',
+        updatedAt: '2026-05-27T08:00:00Z'
+    },
+    {
+        id: 'c-5',
+        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        code: 'TEC-401',
+        name: 'Robótica Aplicada y Sistemas Autónomos',
+        description: 'Diseño avanzado de robots móviles, cinemática directa/inversa, sensores inteligentes y sistemas de control autónomo.',
+        credits: 4,
+        status: 'active',
+        prerequisites: ['c-1', 'c-3'], // Requiere Álgebra (c-1) y Programación Robótica (c-3)
+        createdAt: '2026-05-27T09:00:00Z',
+        updatedAt: '2026-05-27T09:00:00Z'
     }
 ];
 exports.professors = [
@@ -400,11 +427,33 @@ exports.students = [
     }
 ];
 exports.enrollments = [
+    // Matrículas Aprobadas (Completed) en periodos anteriores (2025-II) para Alejandro Mendoza (st-1)
+    {
+        id: 'en-completed-1',
+        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        studentId: 'st-1',
+        courseId: 'c-1', // Álgebra y Trigonometría Avanzada
+        academicPeriod: '2025-II',
+        status: 'completed',
+        createdAt: '2025-08-01T08:00:00Z',
+        updatedAt: '2025-12-20T12:00:00Z'
+    },
+    {
+        id: 'en-completed-2',
+        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        studentId: 'st-1',
+        courseId: 'c-3', // Programación y Robótica
+        academicPeriod: '2025-II',
+        status: 'completed',
+        createdAt: '2025-08-01T08:30:00Z',
+        updatedAt: '2025-12-20T12:00:00Z'
+    },
+    // Matrículas Activas y de Prueba del periodo 2026-I
     {
         id: 'en-1',
         tenantId: 't-11111111-1111-1111-1111-111111111111',
         studentId: 'st-1',
-        courseId: 'c-1', // Álgebra
+        courseId: 'c-1', // Álgebra (también inscrito activo en el catálogo)
         academicPeriod: '2026-I',
         status: 'active',
         createdAt: '2026-03-01T09:00:00Z',

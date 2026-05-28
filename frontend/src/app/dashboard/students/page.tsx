@@ -89,6 +89,10 @@ export default function StudentsPage() {
   
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   
+  // Estados para validación de prerrequisitos académicos
+  const [missingPrereqs, setMissingPrereqs] = useState<{ id: string; code: string; name: string }[]>([]);
+  const [enrollmentError, setEnrollmentError] = useState<string | null>(null);
+  
   // Campos del formulario de Estudiante
   const [docId, setDocId] = useState('');
   const [firstName, setFirstName] = useState('');
@@ -162,6 +166,12 @@ export default function StudentsPage() {
     }
   }, [token, tenant]);
 
+  // Limpiar errores de matrícula al cambiar de curso
+  useEffect(() => {
+    setMissingPrereqs([]);
+    setEnrollmentError(null);
+  }, [selectedCourseId]);
+
   // Cargar matrículas de un alumno
   const fetchEnrollments = async (student: Student) => {
     const activeTenantId = tenant?.id || 't-11111111-1111-1111-1111-111111111111';
@@ -206,6 +216,8 @@ export default function StudentsPage() {
     setSelectedStudent(student);
     setSelectedCourseId('');
     setAcademicPeriod('2026-I');
+    setMissingPrereqs([]);
+    setEnrollmentError(null);
     setIsEnrollmentsOpen(true);
     fetchEnrollments(student);
   };
@@ -322,6 +334,9 @@ export default function StudentsPage() {
     const activeTenantId = tenant?.id || 't-11111111-1111-1111-1111-111111111111';
     if (!token) return;
 
+    setMissingPrereqs([]);
+    setEnrollmentError(null);
+
     try {
       const res = await fetch(`${getApiUrl()}/tenants/${activeTenantId}/students/${selectedStudent.id}/enrollments`, {
         method: 'POST',
@@ -335,12 +350,20 @@ export default function StudentsPage() {
       const data = await res.json();
       if (res.ok) {
         setSelectedCourseId('');
+        setMissingPrereqs([]);
+        setEnrollmentError(null);
         fetchEnrollments(selectedStudent);
       } else {
-        alert(`Error: ${data.error}`);
+        if (data.missingPrerequisites) {
+          setMissingPrereqs(data.missingPrerequisites);
+          setEnrollmentError(data.error);
+        } else {
+          setEnrollmentError(data.error || 'Error desconocido al matricular');
+        }
       }
     } catch (err) {
       console.error(err);
+      setEnrollmentError('Error de conexión con el servidor');
     }
   };
 
@@ -804,6 +827,35 @@ export default function StudentsPage() {
                 </div>
               </form>
             </div>
+
+            {/* ALERTA DE ERROR O PRERREQUISITOS FALTANTES */}
+            {(enrollmentError || missingPrereqs.length > 0) && (
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 space-y-2.5 animate-fade-in shrink-0">
+                <div className="flex items-start gap-2.5">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <h5 className="text-xs font-black text-amber-900">{enrollmentError || 'Requisitos académicos no cumplidos'}</h5>
+                    <p className="text-[10px] font-bold text-amber-700/80 leading-normal">
+                      El estudiante no cumple con la malla curricular para poder inscribirse en este curso.
+                    </p>
+                  </div>
+                </div>
+
+                {missingPrereqs.length > 0 && (
+                  <div className="pl-7 space-y-2 border-t border-amber-150 pt-2.5">
+                    <span className="text-[9px] uppercase font-black text-amber-800 tracking-wider block">Cursos Obligatorios Pendientes:</span>
+                    <ul className="space-y-1">
+                      {missingPrereqs.map((prereq) => (
+                        <li key={prereq.id} className="flex items-center gap-2 text-[10px] font-bold text-amber-900 bg-white/60 px-2.5 py-1.5 rounded-xl border border-amber-100/50 shadow-sm">
+                          <span className="font-mono text-[9px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-extrabold">{prereq.code}</span>
+                          <span>{prereq.name}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* LISTADO DE CURSOS MATRICULADOS */}
             <div className="space-y-3 flex-1 flex flex-col">
