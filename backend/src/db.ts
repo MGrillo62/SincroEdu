@@ -469,3 +469,126 @@ export const auditLogs: AuditLog[] = [
   }
 ];
 
+// =====================================================================
+// MODELOS Y SEMILLAS DE ALUMNOS Y MATRÍCULAS (FASE 3)
+// =====================================================================
+
+export interface Student {
+  id: string;
+  tenantId: string;
+  enrollmentNumber: string;
+  documentId: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string | null;
+  birthDate: string; // dd/mm/aaaa
+  admissionDate: string; // dd/mm/aaaa
+  status: 'active' | 'suspended' | 'graduated' | 'inactive';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Enrollment {
+  id: string;
+  tenantId: string;
+  studentId: string;
+  courseId: string;
+  academicPeriod: string;
+  status: 'active' | 'dropped' | 'completed';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const students: Student[] = [
+  {
+    id: 'st-1',
+    tenantId: 't-11111111-1111-1111-1111-111111111111',
+    enrollmentNumber: 'MAT-2026-0001',
+    documentId: 'DNI 72615438',
+    firstName: 'Alejandro',
+    lastName: 'Mendoza Torres',
+    email: 'alejandro.mendoza@student.edu',
+    phone: '+51 987 111 222',
+    birthDate: '12/05/2008',
+    admissionDate: '01/03/2026',
+    status: 'active',
+    createdAt: '2026-03-01T08:00:00Z',
+    updatedAt: '2026-03-01T08:00:00Z'
+  },
+  {
+    id: 'st-2',
+    tenantId: 't-11111111-1111-1111-1111-111111111111',
+    enrollmentNumber: 'MAT-2026-0002',
+    documentId: 'DNI 73928174',
+    firstName: 'Valeria',
+    lastName: 'Campos Espinoza',
+    email: 'valeria.campos@student.edu',
+    phone: '+51 987 333 444',
+    birthDate: '25/09/2009',
+    admissionDate: '01/03/2026',
+    status: 'active',
+    createdAt: '2026-03-01T08:00:00Z',
+    updatedAt: '2026-03-01T08:00:00Z'
+  },
+  {
+    id: 'st-3',
+    tenantId: 't-11111111-1111-1111-1111-111111111111',
+    enrollmentNumber: 'MAT-2026-0003',
+    documentId: 'DNI 74819203',
+    firstName: 'Bruno',
+    lastName: 'García Paredes',
+    email: 'bruno.garcia@student.edu',
+    phone: '+51 987 555 666',
+    birthDate: '08/11/2007',
+    admissionDate: '15/03/2026',
+    status: 'suspended',
+    createdAt: '2026-03-15T09:00:00Z',
+    updatedAt: '2026-03-15T09:00:00Z'
+  }
+];
+
+export const enrollments: Enrollment[] = [
+  {
+    id: 'en-1',
+    tenantId: 't-11111111-1111-1111-1111-111111111111',
+    studentId: 'st-1',
+    courseId: 'c-1', // Álgebra
+    academicPeriod: '2026-I',
+    status: 'active',
+    createdAt: '2026-03-01T09:00:00Z',
+    updatedAt: '2026-03-01T09:00:00Z'
+  },
+  {
+    id: 'en-2',
+    tenantId: 't-11111111-1111-1111-1111-111111111111',
+    studentId: 'st-1',
+    courseId: 'c-2', // Literatura
+    academicPeriod: '2026-I',
+    status: 'active',
+    createdAt: '2026-03-01T09:05:00Z',
+    updatedAt: '2026-03-01T09:05:00Z'
+  },
+  {
+    id: 'en-3',
+    tenantId: 't-11111111-1111-1111-1111-111111111111',
+    studentId: 'st-2',
+    courseId: 'c-1', // Álgebra
+    academicPeriod: '2026-I',
+    status: 'active',
+    createdAt: '2026-03-02T10:00:00Z',
+    updatedAt: '2026-03-02T10:00:00Z'
+  },
+  {
+    id: 'en-4',
+    tenantId: 't-11111111-1111-1111-1111-111111111111',
+    studentId: 'st-3',
+    courseId: 'c-2', // Literatura
+    academicPeriod: '2026-I',
+    status: 'dropped',
+    createdAt: '2026-03-16T11:00:00Z',
+    updatedAt: '2026-04-01T15:30:00Z'
+  }
+];
+
+

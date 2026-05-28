@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.auditLogs = exports.campuses = exports.professors = exports.courses = exports.users = exports.roleMenuPermissions = exports.roles = exports.menuOptions = exports.tenants = void 0;
+exports.enrollments = exports.students = exports.auditLogs = exports.campuses = exports.professors = exports.courses = exports.users = exports.roleMenuPermissions = exports.roles = exports.menuOptions = exports.tenants = void 0;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 // -------------------------------------------------------------
 // MOCK DATA INITIALIZATION
@@ -350,5 +350,94 @@ exports.auditLogs = [
         previousValues: { status: 'active' },
         newValues: { status: 'maintenance' },
         createdAt: '2026-05-18T16:45:00Z'
+    }
+];
+exports.students = [
+    {
+        id: 'st-1',
+        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        enrollmentNumber: 'MAT-2026-0001',
+        documentId: 'DNI 72615438',
+        firstName: 'Alejandro',
+        lastName: 'Mendoza Torres',
+        email: 'alejandro.mendoza@student.edu',
+        phone: '+51 987 111 222',
+        birthDate: '12/05/2008',
+        admissionDate: '01/03/2026',
+        status: 'active',
+        createdAt: '2026-03-01T08:00:00Z',
+        updatedAt: '2026-03-01T08:00:00Z'
+    },
+    {
+        id: 'st-2',
+        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        enrollmentNumber: 'MAT-2026-0002',
+        documentId: 'DNI 73928174',
+        firstName: 'Valeria',
+        lastName: 'Campos Espinoza',
+        email: 'valeria.campos@student.edu',
+        phone: '+51 987 333 444',
+        birthDate: '25/09/2009',
+        admissionDate: '01/03/2026',
+        status: 'active',
+        createdAt: '2026-03-01T08:00:00Z',
+        updatedAt: '2026-03-01T08:00:00Z'
+    },
+    {
+        id: 'st-3',
+        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        enrollmentNumber: 'MAT-2026-0003',
+        documentId: 'DNI 74819203',
+        firstName: 'Bruno',
+        lastName: 'García Paredes',
+        email: 'bruno.garcia@student.edu',
+        phone: '+51 987 555 666',
+        birthDate: '08/11/2007',
+        admissionDate: '15/03/2026',
+        status: 'suspended',
+        createdAt: '2026-03-15T09:00:00Z',
+        updatedAt: '2026-03-15T09:00:00Z'
+    }
+];
+exports.enrollments = [
+    {
+        id: 'en-1',
+        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        studentId: 'st-1',
+        courseId: 'c-1', // Álgebra
+        academicPeriod: '2026-I',
+        status: 'active',
+        createdAt: '2026-03-01T09:00:00Z',
+        updatedAt: '2026-03-01T09:00:00Z'
+    },
+    {
+        id: 'en-2',
+        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        studentId: 'st-1',
+        courseId: 'c-2', // Literatura
+        academicPeriod: '2026-I',
+        status: 'active',
+        createdAt: '2026-03-01T09:05:00Z',
+        updatedAt: '2026-03-01T09:05:00Z'
+    },
+    {
+        id: 'en-3',
+        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        studentId: 'st-2',
+        courseId: 'c-1', // Álgebra
+        academicPeriod: '2026-I',
+        status: 'active',
+        createdAt: '2026-03-02T10:00:00Z',
+        updatedAt: '2026-03-02T10:00:00Z'
+    },
+    {
+        id: 'en-4',
+        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        studentId: 'st-3',
+        courseId: 'c-2', // Literatura
+        academicPeriod: '2026-I',
+        status: 'dropped',
+        createdAt: '2026-03-16T11:00:00Z',
+        updatedAt: '2026-04-01T15:30:00Z'
     }
 ];

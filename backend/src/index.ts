@@ -13,13 +13,17 @@ import {
   professors,
   campuses,
   auditLogs,
+  students,
+  enrollments,
   Tenant, 
   Role, 
   User,
   Course,
   Professor,
   Campus,
-  AuditLog
+  AuditLog,
+  Student,
+  Enrollment
 } from './db';
 
 dotenv.config();
@@ -823,7 +827,289 @@ app.get('/api/tenants/:tenantId/campuses/:campusId/history', authenticateJWT, (r
   return res.json(history);
 });
 
+// =====================================================================
+// API 10: MÓDULO EXPEDIENTES Y MATRÍCULA DE ALUMNOS (FASE 3)
+// =====================================================================
+
+// Listar todos los estudiantes del Tenant
+app.get('/api/tenants/:tenantId/students', authenticateJWT, (req: AuthenticatedRequest, res: Response) => {
+  const { tenantId } = req.params;
+  if (req.user?.tenantId && req.user.tenantId !== tenantId) {
+    return res.status(403).json({ error: 'Acceso denegado: Aislamiento Tenant violado' });
+  }
+  const tenantStudents = students.filter(s => s.tenantId === tenantId);
+  return res.json(tenantStudents);
+});
+
+// Registrar un nuevo estudiante
+app.post('/api/tenants/:tenantId/students', authenticateJWT, (req: AuthenticatedRequest, res: Response) => {
+  const { tenantId } = req.params;
+  const { documentId, firstName, lastName, email, phone, birthDate, admissionDate, status } = req.body;
+
+  if (req.user?.tenantId && req.user.tenantId !== tenantId) {
+    return res.status(403).json({ error: 'Acceso denegado: Aislamiento Tenant violado' });
+  }
+
+  if (!documentId || !firstName || !lastName || !email || !birthDate || !admissionDate) {
+    return res.status(400).json({ error: 'Todos los campos obligatorios deben ser completados' });
+  }
+
+  // Generar código de matrícula automático MAT-2026-XXXX
+  const year = new Date().getFullYear();
+  const tenantStudents = students.filter(s => s.tenantId === tenantId);
+  const count = tenantStudents.length;
+  const enrollmentNumber = `MAT-${year}-${String(count + 1).padStart(4, '0')}`;
+
+  const newStudent: Student = {
+    id: `st-${Date.now()}`,
+    tenantId,
+    enrollmentNumber,
+    documentId,
+    firstName,
+    lastName,
+    email,
+    phone: phone || null,
+    birthDate,
+    admissionDate,
+    status: status || 'active',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  students.push(newStudent);
+
+  // Registrar en Historial de Auditoría
+  addAuditLog(tenantId, 'students', newStudent.id, 'CREATE', req.user?.email || 'admin@colegiopremium.edu', null, newStudent);
+
+  return res.status(201).json(newStudent);
+});
+
+// Editar expediente del alumno
+app.put('/api/tenants/:tenantId/students/:studentId', authenticateJWT, (req: AuthenticatedRequest, res: Response) => {
+  const { tenantId, studentId } = req.params;
+  const { documentId, firstName, lastName, email, phone, birthDate, admissionDate } = req.body;
+
+  if (req.user?.tenantId && req.user.tenantId !== tenantId) {
+    return res.status(403).json({ error: 'Acceso denegado: Aislamiento Tenant violado' });
+  }
+
+  const studentIdx = students.findIndex(s => s.id === studentId && s.tenantId === tenantId);
+  if (studentIdx === -1) {
+    return res.status(404).json({ error: 'Estudiante no encontrado' });
+  }
+
+  const previousStudent = { ...students[studentIdx] };
+
+  // Aplicar cambios
+  if (documentId) students[studentIdx].documentId = documentId;
+  if (firstName) students[studentIdx].firstName = firstName;
+  if (lastName) students[studentIdx].lastName = lastName;
+  if (email) students[studentIdx].email = email;
+  if (phone !== undefined) students[studentIdx].phone = phone;
+  if (birthDate) students[studentIdx].birthDate = birthDate;
+  if (admissionDate) students[studentIdx].admissionDate = admissionDate;
+  students[studentIdx].updatedAt = new Date().toISOString();
+
+  const newStudent = students[studentIdx];
+
+  // Registrar en Auditoría
+  addAuditLog(
+    tenantId, 
+    'students', 
+    studentId, 
+    'UPDATE', 
+    req.user?.email || 'admin@colegiopremium.edu', 
+    previousStudent, 
+    newStudent
+  );
+
+  return res.json(newStudent);
+});
+
+// Modificar Estado del estudiante
+app.patch('/api/tenants/:tenantId/students/:studentId/status', authenticateJWT, (req: AuthenticatedRequest, res: Response) => {
+  const { tenantId, studentId } = req.params;
+  const { status } = req.body;
+
+  if (req.user?.tenantId && req.user.tenantId !== tenantId) {
+    return res.status(403).json({ error: 'Acceso denegado: Aislamiento Tenant violado' });
+  }
+
+  if (!status || !['active', 'suspended', 'graduated', 'inactive'].includes(status)) {
+    return res.status(400).json({ error: 'Estado de alumno inválido' });
+  }
+
+  const studentIdx = students.findIndex(s => s.id === studentId && s.tenantId === tenantId);
+  if (studentIdx === -1) {
+    return res.status(404).json({ error: 'Estudiante no encontrado' });
+  }
+
+  const previousStatus = students[studentIdx].status;
+  students[studentIdx].status = status as any;
+  students[studentIdx].updatedAt = new Date().toISOString();
+
+  // Registrar en Auditoría
+  addAuditLog(
+    tenantId, 
+    'students', 
+    studentId, 
+    'STATUS_CHANGE', 
+    req.user?.email || 'admin@colegiopremium.edu', 
+    { status: previousStatus }, 
+    { status }
+  );
+
+  return res.json(students[studentIdx]);
+});
+
+// Obtener Auditoría de un estudiante
+app.get('/api/tenants/:tenantId/students/:studentId/history', authenticateJWT, (req: AuthenticatedRequest, res: Response) => {
+  const { tenantId, studentId } = req.params;
+  if (req.user?.tenantId && req.user.tenantId !== tenantId) {
+    return res.status(403).json({ error: 'Acceso denegado: Aislamiento Tenant violado' });
+  }
+
+  const history = auditLogs.filter(log => log.tenantId === tenantId && log.tableName === 'students' && log.recordId === studentId);
+  return res.json(history);
+});
+
+// =====================================================================
+// API 11: MATRÍCULAS DE ASIGNATURAS (ENROLLMENTS)
+// =====================================================================
+
+// Obtener asignaturas en las que está matriculado un estudiante
+app.get('/api/tenants/:tenantId/students/:studentId/enrollments', authenticateJWT, (req: AuthenticatedRequest, res: Response) => {
+  const { tenantId, studentId } = req.params;
+
+  if (req.user?.tenantId && req.user.tenantId !== tenantId) {
+    return res.status(403).json({ error: 'Acceso denegado: Aislamiento Tenant violado' });
+  }
+
+  const studentEnrollments = enrollments.filter(e => e.studentId === studentId && e.tenantId === tenantId);
+  
+  // Mapear con datos del curso
+  const mapped = studentEnrollments.map(e => {
+    const course = courses.find(c => c.id === e.courseId);
+    return {
+      ...e,
+      courseCode: course ? course.code : 'N/A',
+      courseName: course ? course.name : 'Curso desconocido',
+      courseCredits: course ? course.credits : 0
+    };
+  });
+
+  return res.json(mapped);
+});
+
+// Matricular estudiante en una asignatura
+app.post('/api/tenants/:tenantId/students/:studentId/enrollments', authenticateJWT, (req: AuthenticatedRequest, res: Response) => {
+  const { tenantId, studentId } = req.params;
+  const { courseId, academicPeriod } = req.body;
+
+  if (req.user?.tenantId && req.user.tenantId !== tenantId) {
+    return res.status(403).json({ error: 'Acceso denegado: Aislamiento Tenant violado' });
+  }
+
+  if (!courseId || !academicPeriod) {
+    return res.status(400).json({ error: 'Curso y Periodo Académico obligatorios' });
+  }
+
+  // Verificar si el estudiante existe
+  const studentExists = students.find(s => s.id === studentId && s.tenantId === tenantId);
+  if (!studentExists) {
+    return res.status(404).json({ error: 'Estudiante no encontrado' });
+  }
+
+  // Verificar si el curso existe
+  const courseExists = courses.find(c => c.id === courseId && c.tenantId === tenantId);
+  if (!courseExists) {
+    return res.status(404).json({ error: 'Curso no encontrado en el catálogo' });
+  }
+
+  // Verificar si ya está matriculado y activo en este periodo
+  const alreadyEnrolled = enrollments.find(
+    e => e.studentId === studentId && 
+         e.courseId === courseId && 
+         e.academicPeriod === academicPeriod && 
+         e.status === 'active'
+  );
+
+  if (alreadyEnrolled) {
+    return res.status(409).json({ error: 'El estudiante ya se encuentra matriculado activamente en este curso para el periodo actual' });
+  }
+
+  const newEnrollment: Enrollment = {
+    id: `en-${Date.now()}`,
+    tenantId,
+    studentId,
+    courseId,
+    academicPeriod,
+    status: 'active',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  enrollments.push(newEnrollment);
+
+  // Registrar Auditoría
+  addAuditLog(
+    tenantId, 
+    'enrollments', 
+    newEnrollment.id, 
+    'CREATE', 
+    req.user?.email || 'admin@colegiopremium.edu', 
+    null, 
+    newEnrollment
+  );
+
+  return res.status(201).json({
+    ...newEnrollment,
+    courseCode: courseExists.code,
+    courseName: courseExists.name,
+    courseCredits: courseExists.credits
+  });
+});
+
+// Dar de baja o retirar una matrícula (Dropped)
+app.delete('/api/tenants/:tenantId/students/:studentId/enrollments/:enrollmentId', authenticateJWT, (req: AuthenticatedRequest, res: Response) => {
+  const { tenantId, studentId, enrollmentId } = req.params;
+
+  if (req.user?.tenantId && req.user.tenantId !== tenantId) {
+    return res.status(403).json({ error: 'Acceso denegado: Aislamiento Tenant violado' });
+  }
+
+  const enrollmentIdx = enrollments.findIndex(
+    e => e.id === enrollmentId && e.studentId === studentId && e.tenantId === tenantId
+  );
+
+  if (enrollmentIdx === -1) {
+    return res.status(404).json({ error: 'Matrícula no encontrada' });
+  }
+
+  const previousEnrollment = { ...enrollments[enrollmentIdx] };
+
+  // Modificar estado a 'dropped'
+  enrollments[enrollmentIdx].status = 'dropped';
+  enrollments[enrollmentIdx].updatedAt = new Date().toISOString();
+
+  const newEnrollment = enrollments[enrollmentIdx];
+
+  // Registrar Auditoría
+  addAuditLog(
+    tenantId,
+    'enrollments',
+    enrollmentId,
+    'STATUS_CHANGE',
+    req.user?.email || 'admin@colegiopremium.edu',
+    { status: previousEnrollment.status },
+    { status: 'dropped' }
+  );
+
+  return res.json(newEnrollment);
+});
+
 // INICIAR SERVIDOR
+
 app.listen(PORT, () => {
   console.log(`=============================================================`);
   console.log(`🚀 SINCROEDU BACKEND INICIADO EN EL PUERTO ${PORT}`);
