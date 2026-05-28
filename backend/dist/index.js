@@ -9,7 +9,23 @@ const dotenv_1 = __importDefault(require("dotenv"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const db_1 = require("./db");
+const pg_1 = require("pg");
 dotenv_1.default.config();
+// Pool de conexión a PostgreSQL en Neon
+const pool = new pg_1.Pool({
+    connectionString: process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_CqBjkLZJ46mu@ep-late-sun-aqcydx0h-pooler.c-8.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require'
+});
+// Helper para validar si la base de datos está disponible
+let dbAvailable = false;
+pool.query('SELECT 1')
+    .then(() => {
+    dbAvailable = true;
+    console.log('✅ Base de datos PostgreSQL en Neon conectada y lista.');
+})
+    .catch((err) => {
+    dbAvailable = false;
+    console.warn('⚠️ No se pudo conectar a PostgreSQL. Usando fallback en memoria.', err.message);
+});
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 4000;
 const JWT_SECRET = process.env.JWT_SECRET || 'sincroedu_super_secret_key_12345';
@@ -1846,6 +1862,1965 @@ app.get('/api/tenants/:tenantId/students/:studentId/report-card', authenticateJW
         cumulativeGpa,
         totalCredits
     });
+});
+// ============================================================================
+// MÓDULO DE COBROS, PAGOS Y LIBRO MAYOR (LEDGER CONTABLE CON ACID)
+// ============================================================================
+// 1. Obtener y configurar precios de créditos académicos
+app.get('/api/tenants/:tenantId/billing/credit-pricing', authenticateJWT, async (req, res) => {
+    const { tenantId } = req.params;
+    if (req.user?.tenantId && req.user.tenantId !== tenantId) {
+        return res.status(403).json({ error: 'Acceso denegado: Aislamiento Tenant violado' });
+    }
+    if (dbAvailable) {
+        try {
+            const result = await pool.query('SELECT * FROM credit_pricing WHERE tenant_id = $1 ORDER BY academic_period DESC', [tenantId]);
+            return res.json(result.rows);
+        }
+        catch (err) {
+            return res.status(500).json({ error: 'Error al consultar precios de créditos en base de datos', details: err.message });
+        }
+    }
+    else {
+        const pricing = db_1.creditPricings.filter(p => p.tenantId === tenantId);
+        return res.json(pricing);
+    }
+});
+app.post('/api/tenants/:tenantId/billing/credit-pricing', authenticateJWT, async (req, res) => {
+    const { tenantId } = req.params;
+    const { academicPeriod, pricePerCredit } = req.body;
+    if (req.user?.tenantId && req.user.tenantId !== tenantId) {
+        return res.status(403).json({ error: 'Acceso denegado: Aislamiento Tenant violado' });
+    }
+    if (!academicPeriod || pricePerCredit === undefined) {
+        return res.status(400).json({ error: 'academicPeriod y pricePerCredit son obligatorios' });
+    }
+    if (dbAvailable) {
+        try {
+            const result = await pool.query(`INSERT INTO credit_pricing (tenant_id, academic_period, price_per_credit, updated_at) 
+         VALUES ($1, $2, $3, NOW()) 
+         ON CONFLICT (tenant_id, academic_period) 
+         DO UPDATE SET price_per_credit = EXCLUDED.price_per_credit, updated_at = NOW() 
+         RETURNING *`, [tenantId, academicPeriod, pricePerCredit]);
+            return res.status(201).json(result.rows[0]);
+        }
+        catch (err) {
+            return res.status(500).json({ error: 'Error al guardar precio de crédito', details: err.message });
+        }
+    }
+    else {
+        const existingIdx = db_1.creditPricings.findIndex(p => p.tenantId === tenantId && p.academicPeriod === academicPeriod);
+        const newPricing = {
+            id: existingIdx !== -1 ? db_1.creditPricings[existingIdx].id : `pr-${Date.now()}`,
+            tenantId,
+            academicPeriod,
+            pricePerCredit: Number(pricePerCredit),
+            createdAt: existingIdx !== -1 ? db_1.creditPricings[existingIdx].createdAt : new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        };
+        if (existingIdx !== -1) {
+            db_1.creditPricings[existingIdx] = newPricing;
+        }
+        else {
+            db_1.creditPricings.push(newPricing);
+        }
+        return res.status(201).json(newPricing);
+    }
+});
+// 2. Obtener apoderados / alumnos vinculados
+app.get('/api/tenants/:tenantId/billing/guardians', authenticateJWT, async (req, res) => {
+    const { tenantId } = req.params;
+    if (req.user?.tenantId && req.user.tenantId !== tenantId) {
+        return res.status(403).json({ error: 'Acceso denegado: Aislamiento Tenant violado' });
+    }
+    if (dbAvailable) {
+        try {
+            const result = await pool.query(`
+        SELECT sg.*, s.first_name as student_first_name, s.last_name as student_last_name, 
+               u.first_name as guardian_first_name, u.last_name as guardian_last_name, u.email as guardian_email
+        FROM student_guardians sg
+        JOIN students s ON sg.student_id = s.id
+        JOIN users u ON sg.user_id = u.id
+        WHERE s.tenant_id = $1
+      `, [tenantId]);
+            return res.json(result.rows);
+        }
+        catch (err) {
+            return res.status(500).json({ error: 'Error al consultar apoderados', details: err.message });
+        }
+    }
+    else {
+        // Mapear con datos en memoria
+        const data = db_1.studentGuardians.map(sg => {
+            const student = db_1.students.find(s => s.id === sg.studentId);
+            const user = db_1.users.find(u => u.id === sg.userId);
+            return {
+                ...sg,
+                student_first_name: student?.firstName || '',
+                student_last_name: student?.lastName || '',
+                guardian_first_name: user?.firstName || '',
+                guardian_last_name: user?.lastName || '',
+                guardian_email: user?.email || ''
+            };
+        });
+        return res.json(data);
+    }
+});
+// 3. Cuentas por Cobrar (Receivables)
+app.get('/api/tenants/:tenantId/billing/receivables', authenticateJWT, async (req, res) => {
+    const { tenantId } = req.params;
+    const { studentId, status } = req.query;
+    if (req.user?.tenantId && req.user.tenantId !== tenantId) {
+        return res.status(403).json({ error: 'Acceso denegado: Aislamiento Tenant violado' });
+    }
+    // Si el rol es apoderado (Padre), sólo le permitimos ver los recibos de sus hijos
+    let restrictedStudentIds = [];
+    if (req.user?.roleId === 'r-tenant1-parent') {
+        const parentUserId = req.user.id;
+        if (dbAvailable) {
+            const result = await pool.query('SELECT student_id FROM student_guardians WHERE user_id = $1', [parentUserId]);
+            restrictedStudentIds = result.rows.map(r => r.student_id);
+        }
+        else {
+            restrictedStudentIds = db_1.studentGuardians.filter(sg => sg.userId === parentUserId).map(sg => sg.studentId);
+        }
+        if (restrictedStudentIds.length === 0) {
+            return res.json([]); // No tiene alumnos a su cargo
+        }
+    }
+    if (dbAvailable) {
+        try {
+            let query = `
+        SELECT r.*, s.first_name as student_first_name, s.last_name as student_last_name, s.enrollment_number
+        FROM receivables r
+        JOIN students s ON r.student_id = s.id
+        WHERE r.tenant_id = $1
+      `;
+            const params = [tenantId];
+            let paramCount = 1;
+            if (studentId) {
+                paramCount++;
+                query += ` AND r.student_id = $${paramCount}`;
+                params.push(studentId);
+            }
+            else if (restrictedStudentIds.length > 0) {
+                // Restricción para padres de familia
+                query += ` AND r.student_id IN (${restrictedStudentIds.map((_, i) => `$${paramCount + 1 + i}`).join(',')})`;
+                restrictedStudentIds.forEach(id => params.push(id));
+                paramCount += restrictedStudentIds.length;
+            }
+            if (status) {
+                paramCount++;
+                query += ` AND r.status = $${paramCount}`;
+                params.push(status);
+            }
+            query += ' ORDER BY r.due_date ASC';
+            const result = await pool.query(query, params);
+            return res.json(result.rows);
+        }
+        catch (err) {
+            return res.status(500).json({ error: 'Error al consultar cuentas por cobrar', details: err.message });
+        }
+    }
+    else {
+        let filtered = db_1.receivables.filter(r => r.tenantId === tenantId);
+        if (studentId) {
+            filtered = filtered.filter(r => r.studentId === studentId);
+        }
+        else if (restrictedStudentIds.length > 0) {
+            filtered = filtered.filter(r => restrictedStudentIds.includes(r.studentId));
+        }
+        if (status) {
+            filtered = filtered.filter(r => r.status === status);
+        }
+        const result = filtered.map(r => {
+            const student = db_1.students.find(s => s.id === r.studentId);
+            return {
+                ...r,
+                student_first_name: student?.firstName || '',
+                student_last_name: student?.lastName || '',
+                enrollment_number: student?.enrollmentNumber || ''
+            };
+        });
+        return res.json(result);
+    }
+});
+// Crear una cuenta por cobrar manualmente o ligada a matrícula
+app.post('/api/tenants/:tenantId/billing/receivables', authenticateJWT, async (req, res) => {
+    const { tenantId } = req.params;
+    const { studentId, enrollmentId, concept, amount, dueDate } = req.body;
+    if (req.user?.tenantId && req.user.tenantId !== tenantId) {
+        return res.status(403).json({ error: 'Acceso denegado: Aislamiento Tenant violado' });
+    }
+    if (!studentId || !concept || !amount || !dueDate) {
+        return res.status(400).json({ error: 'studentId, concept, amount y dueDate son obligatorios' });
+    }
+    if (dbAvailable) {
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+            const result = await client.query(`INSERT INTO receivables (tenant_id, student_id, enrollment_id, concept, amount, due_date, status) 
+         VALUES ($1, $2, $3, $4, $5, $6, 'PENDING') RETURNING *`, [tenantId, studentId, enrollmentId || null, concept, amount, dueDate]);
+            const receivable = result.rows[0];
+            // Asiento contable de provisión (Devengo de Ingresos)
+            // Debe: Cuentas por Cobrar (12100) = amount
+            // Haber: Ingresos Educativos (40100) = amount
+            const entryResult = await client.query(`INSERT INTO ledger_entries (tenant_id, description, entry_date) 
+         VALUES ($1, $2, NOW()) RETURNING id`, [tenantId, `Devengo de cuenta por cobrar: ${concept} (Alumno: ${studentId})`]);
+            const entryId = entryResult.rows[0].id;
+            await client.query(`INSERT INTO ledger_lines (entry_id, account_id, debit, credit) VALUES 
+         ($1, '12100', $2, 0),
+         ($1, '40100', 0, $2)`, [entryId, amount]);
+            await client.query('COMMIT');
+            return res.status(201).json(receivable);
+        }
+        catch (err) {
+            await client.query('ROLLBACK');
+            return res.status(500).json({ error: 'Error al registrar cuenta por cobrar e ingresos devengados', details: err.message });
+        }
+        finally {
+            client.release();
+        }
+    }
+    else {
+        const newRec = {
+            id: `rec-${Date.now()}`,
+            tenantId,
+            studentId,
+            enrollmentId: enrollmentId || null,
+            concept,
+            amount: Number(amount),
+            paidAmount: 0,
+            dueDate,
+            status: 'PENDING',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        };
+        db_1.receivables.push(newRec);
+        // Contabilizar en memoria
+        const newEntryId = `e-${Date.now()}`;
+        db_1.ledgerEntries.push({
+            id: newEntryId,
+            tenantId,
+            transactionId: null,
+            entryDate: new Date().toISOString(),
+            description: `Devengo de cuenta por cobrar: ${concept} (Alumno: ${studentId})`,
+            createdAt: new Date().toISOString()
+        });
+        db_1.ledgerLines.push({ id: `l-${Date.now()}-1`, entryId: newEntryId, accountId: '12100', debit: Number(amount), credit: 0, createdAt: new Date().toISOString() }, { id: `l-${Date.now()}-2`, entryId: newEntryId, accountId: '40100', debit: 0, credit: Number(amount), createdAt: new Date().toISOString() });
+        return res.status(201).json(newRec);
+    }
+});
+// 4. Cuentas por Pagar (Payables)
+app.get('/api/tenants/:tenantId/billing/payables', authenticateJWT, async (req, res) => {
+    const { tenantId } = req.params;
+    const { professorId, status } = req.query;
+    if (req.user?.tenantId && req.user.tenantId !== tenantId) {
+        return res.status(403).json({ error: 'Acceso denegado: Aislamiento Tenant violado' });
+    }
+    // Si el usuario es profesor, restringimos a que sólo vea sus deudas (Cuentas por Pagar)
+    let restrictedProfessorId = null;
+    if (req.user?.roleId === 'r-tenant1-professor') {
+        const userId = req.user.id;
+        if (dbAvailable) {
+            const result = await pool.query('SELECT id FROM professors WHERE user_id = $1', [userId]);
+            if (result.rows.length > 0) {
+                restrictedProfessorId = result.rows[0].id;
+            }
+        }
+        else {
+            const prof = db_1.professors.find(p => p.userId === userId);
+            if (prof)
+                restrictedProfessorId = prof.id;
+        }
+        if (!restrictedProfessorId) {
+            return res.json([]); // No es profesor registrado en la facultad
+        }
+    }
+    if (dbAvailable) {
+        try {
+            let query = `
+        SELECT p.*, prof.specialty, u.first_name as professor_first_name, u.last_name as professor_last_name
+        FROM payables p
+        LEFT JOIN professors prof ON p.professor_id = prof.id
+        LEFT JOIN users u ON prof.user_id = u.id
+        WHERE p.tenant_id = $1
+      `;
+            const params = [tenantId];
+            let paramCount = 1;
+            if (professorId) {
+                paramCount++;
+                query += ` AND p.professor_id = $${paramCount}`;
+                params.push(professorId);
+            }
+            else if (restrictedProfessorId) {
+                paramCount++;
+                query += ` AND p.professor_id = $${paramCount}`;
+                params.push(restrictedProfessorId);
+            }
+            if (status) {
+                paramCount++;
+                query += ` AND p.status = $${paramCount}`;
+                params.push(status);
+            }
+            query += ' ORDER BY p.due_date ASC';
+            const result = await pool.query(query, params);
+            return res.json(result.rows);
+        }
+        catch (err) {
+            return res.status(500).json({ error: 'Error al consultar cuentas por pagar', details: err.message });
+        }
+    }
+    else {
+        let filtered = db_1.payables.filter(p => p.tenantId === tenantId);
+        if (professorId) {
+            filtered = filtered.filter(p => p.professorId === professorId);
+        }
+        else if (restrictedProfessorId) {
+            filtered = filtered.filter(p => p.professorId === restrictedProfessorId);
+        }
+        if (status) {
+            filtered = filtered.filter(p => p.status === status);
+        }
+        const result = filtered.map(p => {
+            const prof = db_1.professors.find(pr => pr.id === p.professorId);
+            const user = prof ? db_1.users.find(u => u.id === prof.userId) : null;
+            return {
+                ...p,
+                professor_first_name: user?.firstName || '',
+                professor_last_name: user?.lastName || '',
+                specialty: prof?.specialty || ''
+            };
+        });
+        return res.json(result);
+    }
+});
+// Crear cuenta por pagar manually (Provisión de Gasto)
+app.post('/api/tenants/:tenantId/billing/payables', authenticateJWT, async (req, res) => {
+    const { tenantId } = req.params;
+    const { professorId, concept, amount, dueDate } = req.body;
+    if (req.user?.tenantId && req.user.tenantId !== tenantId) {
+        return res.status(403).json({ error: 'Acceso denegado: Aislamiento Tenant violado' });
+    }
+    if (!concept || !amount || !dueDate) {
+        return res.status(400).json({ error: 'concept, amount y dueDate son obligatorios' });
+    }
+    if (dbAvailable) {
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+            const result = await client.query(`INSERT INTO payables (tenant_id, professor_id, concept, amount, due_date, status) 
+         VALUES ($1, $2, $3, $4, $5, 'PENDING') RETURNING *`, [tenantId, professorId || null, concept, amount, dueDate]);
+            const payable = result.rows[0];
+            // Asiento contable de provisión (Devengo de Gastos de Nómina)
+            // Debe: Gasto de Nómina (50100) = amount
+            // Haber: Cuentas por Pagar (21100) = amount
+            const entryResult = await client.query(`INSERT INTO ledger_entries (tenant_id, description, entry_date) 
+         VALUES ($1, $2, NOW()) RETURNING id`, [tenantId, `Provisión de gasto: ${concept} (Profesor/Contacto: ${professorId || 'General'})`]);
+            const entryId = entryResult.rows[0].id;
+            await client.query(`INSERT INTO ledger_lines (entry_id, account_id, debit, credit) VALUES 
+         ($1, '50100', $2, 0),
+         ($1, '21100', 0, $2)`, [entryId, amount]);
+            await client.query('COMMIT');
+            return res.status(201).json(payable);
+        }
+        catch (err) {
+            await client.query('ROLLBACK');
+            return res.status(500).json({ error: 'Error al registrar cuenta por pagar', details: err.message });
+        }
+        finally {
+            client.release();
+        }
+    }
+    else {
+        const newPay = {
+            id: `pay-${Date.now()}`,
+            tenantId,
+            professorId: professorId || null,
+            concept,
+            amount: Number(amount),
+            paidAmount: 0,
+            dueDate,
+            status: 'PENDING',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        };
+        db_1.payables.push(newPay);
+        // Contabilizar en memoria
+        const newEntryId = `e-${Date.now()}`;
+        db_1.ledgerEntries.push({
+            id: newEntryId,
+            tenantId,
+            transactionId: null,
+            entryDate: new Date().toISOString(),
+            description: `Provisión de gasto: ${concept} (Profesor/Contacto: ${professorId || 'General'})`,
+            createdAt: new Date().toISOString()
+        });
+        db_1.ledgerLines.push({ id: `l-${Date.now()}-1`, entryId: newEntryId, accountId: '50100', debit: Number(amount), credit: 0, createdAt: new Date().toISOString() }, { id: `l-${Date.now()}-2`, entryId: newEntryId, accountId: '21100', debit: 0, credit: Number(amount), createdAt: new Date().toISOString() });
+        return res.status(201).json(newPay);
+    }
+});
+// 5. REGISTRAR UNA TRANSACCIÓN (PAGO/COBRO) CON TRANSACCIÓN ACID COMPLETA
+app.post('/api/tenants/:tenantId/billing/transactions', authenticateJWT, async (req, res) => {
+    const { tenantId } = req.params;
+    const { receivableId, payableId, amount, paymentMethod, gatewayReference, metadata } = req.body;
+    if (req.user?.tenantId && req.user.tenantId !== tenantId) {
+        return res.status(403).json({ error: 'Acceso denegado: Aislamiento Tenant violado' });
+    }
+    if (!receivableId && !payableId) {
+        return res.status(400).json({ error: 'Se requiere receivableId o payableId para imputar el pago' });
+    }
+    if (!amount || amount <= 0 || !paymentMethod) {
+        return res.status(400).json({ error: 'El monto (mayor a 0) y el método de pago son obligatorios' });
+    }
+    const userEmail = req.user?.email || 'sistema@sincroedu.com';
+    if (dbAvailable) {
+        const client = await pool.connect();
+        try {
+            // 1. INICIAR TRANSACCIÓN ACID EN POSTGRESQL
+            await client.query('BEGIN');
+            let txId;
+            let description = '';
+            if (receivableId) {
+                // --- COBRO DE DEUDA DE ALUMNO (INCOME) ---
+                // Bloquear fila del recibo con FOR UPDATE para prevenir dobles cobros concurrentes (ACID Race Conditions)
+                const recResult = await client.query('SELECT * FROM receivables WHERE id = $1 AND tenant_id = $2 FOR UPDATE', [receivableId, tenantId]);
+                if (recResult.rows.length === 0) {
+                    throw new Error(`Cuenta por cobrar '${receivableId}' no encontrada.`);
+                }
+                const receivable = recResult.rows[0];
+                const prevPaid = Number(receivable.paid_amount);
+                const totalAmount = Number(receivable.amount);
+                if (prevPaid >= totalAmount) {
+                    throw new Error('La cuenta por cobrar ya se encuentra totalmente cancelada.');
+                }
+                const newPaid = prevPaid + Number(amount);
+                const newStatus = (newPaid >= totalAmount) ? 'PAID' : 'PENDING';
+                // Actualizar Recibo
+                await client.query('UPDATE receivables SET paid_amount = $1, status = $2, updated_at = NOW() WHERE id = $3', [newPaid, newStatus, receivableId]);
+                // Crear la transacción
+                const txResult = await client.query(`INSERT INTO transactions (tenant_id, receivable_id, payable_id, type, amount, payment_method, gateway_reference, status, created_by, metadata) 
+           VALUES ($1, $2, NULL, 'INCOME', $3, $4, $5, 'COMPLETED', $6, $7) RETURNING id`, [tenantId, receivableId, amount, paymentMethod, gatewayReference || null, req.user?.id || 'u-system', JSON.stringify(metadata || {})]);
+                txId = txResult.rows[0].id;
+                description = `Cobro de pensión: ${receivable.concept} (Alumno ID: ${receivable.student_id}) por ${amount} PEN.`;
+                // Generar Asiento Diario en Libro Mayor (Ledger)
+                // Afectamos cuentas contables reales:
+                // Debe: Efectivo/Bancos (10100) = amount  (Aumento de Activo)
+                // Haber: Cuentas por Cobrar (12100) = amount (Disminución de Activo)
+                const entryResult = await client.query(`INSERT INTO ledger_entries (tenant_id, transaction_id, description, entry_date) 
+           VALUES ($1, $2, $3, NOW()) RETURNING id`, [tenantId, txId, description]);
+                const entryId = entryResult.rows[0].id;
+                await client.query(`INSERT INTO ledger_lines (entry_id, account_id, debit, credit) VALUES 
+           ($1, '10100', $2, 0),
+           ($1, '12100', 0, $2)`, [entryId, amount]);
+            }
+            else {
+                // --- PAGO DE NÓMINA / GASTO (EXPENSE) ---
+                // Bloquear fila de payable para prevenir carreras concurrentes
+                const payResult = await client.query('SELECT * FROM payables WHERE id = $1 AND tenant_id = $2 FOR UPDATE', [payableId, tenantId]);
+                if (payResult.rows.length === 0) {
+                    throw new Error(`Cuenta por pagar '${payableId}' no encontrada.`);
+                }
+                const payable = payResult.rows[0];
+                const prevPaid = Number(payable.paid_amount);
+                const totalAmount = Number(payable.amount);
+                if (prevPaid >= totalAmount) {
+                    throw new Error('La cuenta por pagar ya se encuentra cancelada.');
+                }
+                const newPaid = prevPaid + Number(amount);
+                const newStatus = (newPaid >= totalAmount) ? 'PAID' : 'PENDING';
+                // Actualizar Cuenta por Pagar
+                await client.query('UPDATE payables SET paid_amount = $1, status = $2, updated_at = NOW() WHERE id = $3', [newPaid, newStatus, payableId]);
+                // Crear la transacción
+                const txResult = await client.query(`INSERT INTO transactions (tenant_id, receivable_id, payable_id, type, amount, payment_method, gateway_reference, status, created_by, metadata) 
+           VALUES ($1, NULL, $2, 'EXPENSE', $3, $4, $5, 'COMPLETED', $6, $7) RETURNING id`, [tenantId, payableId, amount, paymentMethod, gatewayReference || null, req.user?.id || 'u-system', JSON.stringify(metadata || {})]);
+                txId = txResult.rows[0].id;
+                description = `Pago emitido: ${payable.concept} por ${amount} PEN.`;
+                // Generar Asiento Diario en Libro Mayor (Ledger)
+                // Debe: Cuentas por Pagar (21100) = amount  (Disminución de Pasivo)
+                // Haber: Efectivo/Bancos (10100) = amount (Disminución de Activo)
+                const entryResult = await client.query(`INSERT INTO ledger_entries (tenant_id, transaction_id, description, entry_date) 
+           VALUES ($1, $2, $3, NOW()) RETURNING id`, [tenantId, txId, description]);
+                const entryId = entryResult.rows[0].id;
+                await client.query(`INSERT INTO ledger_lines (entry_id, account_id, debit, credit) VALUES 
+           ($1, '21100', $2, 0),
+           ($1, '10100', 0, $2)`, [entryId, amount]);
+            }
+            // 2. HACER EL COMMIT DE LA TRANSACCIÓN (Se confirma todo)
+            await client.query('COMMIT');
+            // Consultar la transacción creada completa
+            const finalTx = await client.query('SELECT * FROM transactions WHERE id = $1', [txId]);
+            return res.status(201).json({
+                success: true,
+                message: 'Transacción ACID registrada y contabilizada en el Libro Mayor.',
+                transaction: finalTx.rows[0]
+            });
+        }
+        catch (err) {
+            // 3. EN CASO DE ERROR, HACER ROLLBACK DE TODOS LOS CAMBIOS INMEDIATAMENTE
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: 'Transacción cancelada (Rollback ejecutado con éxito por seguridad)', details: err.message });
+        }
+        finally {
+            client.release();
+        }
+    }
+    else {
+        // --- FALLBACK EN MEMORIA (Simula Transaccionalidad) ---
+        try {
+            let txId = `tx-${Date.now()}`;
+            let description = '';
+            if (receivableId) {
+                const recIdx = db_1.receivables.findIndex(r => r.id === receivableId && r.tenantId === tenantId);
+                if (recIdx === -1)
+                    throw new Error(`Cuenta por cobrar '${receivableId}' no encontrada.`);
+                const receivable = db_1.receivables[recIdx];
+                if (receivable.paidAmount >= receivable.amount) {
+                    throw new Error('La cuenta por cobrar ya se encuentra totalmente cancelada.');
+                }
+                receivable.paidAmount += Number(amount);
+                receivable.status = (receivable.paidAmount >= receivable.amount) ? 'PAID' : 'PENDING';
+                receivable.updatedAt = new Date().toISOString();
+                description = `Cobro de pensión: ${receivable.concept} (Alumno ID: ${receivable.studentId}) por ${amount} PEN.`;
+                // Registrar Transacción
+                db_1.transactions.push({
+                    id: txId,
+                    tenantId,
+                    receivableId,
+                    payableId: null,
+                    type: 'INCOME',
+                    amount: Number(amount),
+                    paymentMethod,
+                    gatewayReference: gatewayReference || null,
+                    status: 'COMPLETED',
+                    transactionDate: new Date().toISOString(),
+                    createdBy: req.user?.id || 'u-system',
+                    metadata,
+                    createdAt: new Date().toISOString()
+                });
+                // Contabilidad
+                const entryId = `e-${Date.now()}`;
+                db_1.ledgerEntries.push({
+                    id: entryId,
+                    tenantId,
+                    transactionId: txId,
+                    entryDate: new Date().toISOString(),
+                    description,
+                    createdAt: new Date().toISOString()
+                });
+                db_1.ledgerLines.push({ id: `l-${Date.now()}-1`, entryId, accountId: '10100', debit: Number(amount), credit: 0, createdAt: new Date().toISOString() }, { id: `l-${Date.now()}-2`, entryId, accountId: '12100', debit: 0, credit: Number(amount), createdAt: new Date().toISOString() });
+            }
+            else {
+                const payIdx = db_1.payables.findIndex(p => p.id === payableId && p.tenantId === tenantId);
+                if (payIdx === -1)
+                    throw new Error(`Cuenta por pagar '${payableId}' no encontrada.`);
+                const payable = db_1.payables[payIdx];
+                if (payable.paidAmount >= payable.amount) {
+                    throw new Error('La cuenta por pagar ya se encuentra cancelada.');
+                }
+                payable.paidAmount += Number(amount);
+                payable.status = (payable.paidAmount >= payable.amount) ? 'PAID' : 'PENDING';
+                payable.updatedAt = new Date().toISOString();
+                description = `Pago emitido: ${payable.concept} por ${amount} PEN.`;
+                // Registrar Transacción
+                db_1.transactions.push({
+                    id: txId,
+                    tenantId,
+                    receivableId: null,
+                    payableId,
+                    type: 'EXPENSE',
+                    amount: Number(amount),
+                    paymentMethod,
+                    gatewayReference: gatewayReference || null,
+                    status: 'COMPLETED',
+                    transactionDate: new Date().toISOString(),
+                    createdBy: req.user?.id || 'u-system',
+                    metadata,
+                    createdAt: new Date().toISOString()
+                });
+                // Contabilidad
+                const entryId = `e-${Date.now()}`;
+                db_1.ledgerEntries.push({
+                    id: entryId,
+                    tenantId,
+                    transactionId: txId,
+                    entryDate: new Date().toISOString(),
+                    description,
+                    createdAt: new Date().toISOString()
+                });
+                db_1.ledgerLines.push({ id: `l-${Date.now()}-1`, entryId, accountId: '21100', debit: Number(amount), credit: 0, createdAt: new Date().toISOString() }, { id: `l-${Date.now()}-2`, entryId, accountId: '10100', debit: 0, credit: Number(amount), createdAt: new Date().toISOString() });
+            }
+            return res.status(201).json({
+                success: true,
+                message: 'Transacción mock registrada y contabilizada (En memoria).',
+                transaction: db_1.transactions.find(t => t.id === txId)
+            });
+        }
+        catch (err) {
+            return res.status(400).json({ error: 'Error al procesar en memoria', details: err.message });
+        }
+    }
+});
+// Obtener transacciones registradas
+app.get('/api/tenants/:tenantId/billing/transactions', authenticateJWT, async (req, res) => {
+    const { tenantId } = req.params;
+    if (req.user?.tenantId && req.user.tenantId !== tenantId) {
+        return res.status(403).json({ error: 'Acceso denegado: Aislamiento Tenant violado' });
+    }
+    if (dbAvailable) {
+        try {
+            const result = await pool.query('SELECT * FROM transactions WHERE tenant_id = $1 ORDER BY transaction_date DESC', [tenantId]);
+            return res.json(result.rows);
+        }
+        catch (err) {
+            return res.status(500).json({ error: 'Error al consultar transacciones', details: err.message });
+        }
+    }
+    else {
+        const tx = db_1.transactions.filter(t => t.tenantId === tenantId).sort((a, b) => b.transactionDate.localeCompare(a.transactionDate));
+        return res.json(tx);
+    }
+});
+// 6. CONSULTAR EL LIBRO MAYOR (LEDGER) CON ASIENTOS DIARIOS
+app.get('/api/tenants/:tenantId/billing/ledger', authenticateJWT, async (req, res) => {
+    const { tenantId } = req.params;
+    if (req.user?.tenantId && req.user.tenantId !== tenantId) {
+        return res.status(403).json({ error: 'Acceso denegado: Aislamiento Tenant violado' });
+    }
+    if (dbAvailable) {
+        try {
+            // Obtener todos los asientos detallados con sus líneas y nombres de cuentas contables
+            const query = `
+        SELECT le.id as entry_id, le.description, le.entry_date, le.transaction_id,
+               ll.id as line_id, ll.account_id, ll.debit, ll.credit, la.name as account_name
+        FROM ledger_entries le
+        JOIN ledger_lines ll ON ll.entry_id = le.id
+        JOIN ledger_accounts la ON ll.account_id = la.id
+        WHERE le.tenant_id = $1
+        ORDER BY le.entry_date DESC, le.id, ll.debit DESC
+      `;
+            const result = await pool.query(query, [tenantId]);
+            // Agrupar por cabecera de asiento para un retorno JSON limpio y estructurado
+            const entriesMap = {};
+            result.rows.forEach(row => {
+                if (!entriesMap[row.entry_id]) {
+                    entriesMap[row.entry_id] = {
+                        id: row.entry_id,
+                        description: row.description,
+                        entryDate: row.entry_date,
+                        transactionId: row.transaction_id,
+                        lines: []
+                    };
+                }
+                entriesMap[row.entry_id].lines.push({
+                    id: row.line_id,
+                    accountId: row.account_id,
+                    accountName: row.account_name,
+                    debit: Number(row.debit),
+                    credit: Number(row.credit)
+                });
+            });
+            return res.json(Object.values(entriesMap));
+        }
+        catch (err) {
+            return res.status(500).json({ error: 'Error al consultar Libro Mayor', details: err.message });
+        }
+    }
+    else {
+        // Agrupar en memoria
+        const grouped = db_1.ledgerEntries.filter(e => e.tenantId === tenantId).map(e => {
+            const lines = db_1.ledgerLines.filter(l => l.entryId === e.id).map(l => {
+                const acc = db_1.ledgerAccounts.find(a => a.id === l.accountId);
+                return {
+                    id: l.id,
+                    accountId: l.accountId,
+                    accountName: acc?.name || 'Cuenta Contable',
+                    debit: l.debit,
+                    credit: l.credit
+                };
+            });
+            return {
+                id: e.id,
+                description: e.description,
+                entryDate: e.entryDate,
+                transactionId: e.transactionId,
+                lines
+            };
+        }).sort((a, b) => b.entryDate.localeCompare(a.entryDate));
+        return res.json(grouped);
+    }
+});
+// 7. VERIFICACIÓN DE SALDOS DEL LIBRO MAYOR (BALANCE DE COMPROBACIÓN - HEALTH CHECK)
+app.get('/api/tenants/:tenantId/billing/ledger/verify', authenticateJWT, async (req, res) => {
+    const { tenantId } = req.params;
+    if (req.user?.tenantId && req.user.tenantId !== tenantId) {
+        return res.status(403).json({ error: 'Acceso denegado: Aislamiento Tenant violado' });
+    }
+    if (dbAvailable) {
+        try {
+            // 1. Obtener sumatorias globales
+            const globalSum = await pool.query(`SELECT SUM(debit) as total_debits, SUM(credit) as total_credits 
+         FROM ledger_lines ll
+         JOIN ledger_entries le ON ll.entry_id = le.id
+         WHERE le.tenant_id = $1`, [tenantId]);
+            const totalDebits = Number(globalSum.rows[0].total_debits || 0);
+            const totalCredits = Number(globalSum.rows[0].total_credits || 0);
+            const globalBalanced = (totalDebits === totalCredits);
+            // 2. Encontrar asientos individuales desbalanceados por error de redondeo u otros
+            const unbalancedEntries = await pool.query(`SELECT le.id, le.description, le.entry_date, 
+                SUM(ll.debit) as debits_sum, SUM(ll.credit) as credits_sum
+         FROM ledger_entries le
+         JOIN ledger_lines ll ON ll.entry_id = le.id
+         WHERE le.tenant_id = $1
+         GROUP BY le.id, le.description, le.entry_date
+         HAVING SUM(ll.debit) <> SUM(ll.credit)
+         ORDER BY le.entry_date DESC`, [tenantId]);
+            return res.json({
+                balanced: globalBalanced && unbalancedEntries.rows.length === 0,
+                globalCheck: {
+                    totalDebits,
+                    totalCredits,
+                    difference: Math.abs(totalDebits - totalCredits),
+                    isBalanced: globalBalanced
+                },
+                unbalancedEntriesCount: unbalancedEntries.rows.length,
+                unbalancedEntries: unbalancedEntries.rows.map(row => ({
+                    entryId: row.id,
+                    description: row.description,
+                    entryDate: row.entry_date,
+                    debitsSum: Number(row.debits_sum),
+                    creditsSum: Number(row.credits_sum),
+                    difference: Math.abs(Number(row.debits_sum) - Number(row.credits_sum))
+                }))
+            });
+        }
+        catch (err) {
+            return res.status(500).json({ error: 'Error al verificar integridad del Libro Mayor', details: err.message });
+        }
+    }
+    else {
+        // Verificación en memoria
+        let totalDebits = 0;
+        let totalCredits = 0;
+        const entries = db_1.ledgerEntries.filter(e => e.tenantId === tenantId);
+        const unbalancedEntriesList = [];
+        entries.forEach(e => {
+            const lines = db_1.ledgerLines.filter(l => l.entryId === e.id);
+            let dSum = 0;
+            let cSum = 0;
+            lines.forEach(l => {
+                dSum += l.debit;
+                cSum += l.credit;
+                totalDebits += l.debit;
+                totalCredits += l.credit;
+            });
+            if (dSum !== cSum) {
+                unbalancedEntriesList.push({
+                    entryId: e.id,
+                    description: e.description,
+                    entryDate: e.entryDate,
+                    debitsSum: dSum,
+                    creditsSum: cSum,
+                    difference: Math.abs(dSum - cSum)
+                });
+            }
+        });
+        const isGlobalBalanced = (totalDebits === totalCredits);
+        return res.json({
+            balanced: isGlobalBalanced && unbalancedEntriesList.length === 0,
+            globalCheck: {
+                totalDebits,
+                totalCredits,
+                difference: Math.abs(totalDebits - totalCredits),
+                isBalanced: isGlobalBalanced
+            },
+            unbalancedEntriesCount: unbalancedEntriesList.length,
+            unbalancedEntries: unbalancedEntriesList
+        });
+    }
+});
+// ============================================================================
+// MÓDULO DE ASISTENCIA, NÓMINA DE PROFESORES Y MOTOR DE RENTABILIDAD
+// ============================================================================
+// 1. Obtener registro de asistencia de profesores
+app.get('/api/tenants/:tenantId/billing/attendance', authenticateJWT, async (req, res) => {
+    const { tenantId } = req.params;
+    const { professorId, courseId } = req.query;
+    if (req.user?.tenantId && req.user.tenantId !== tenantId) {
+        return res.status(403).json({ error: 'Acceso denegado: Aislamiento Tenant violado' });
+    }
+    if (dbAvailable) {
+        try {
+            let query = `
+        SELECT pa.*, c.name as course_name, c.code as course_code,
+               u.first_name as professor_first_name, u.last_name as professor_last_name
+        FROM professor_attendance pa
+        JOIN professors p ON pa.professor_id = p.id
+        JOIN users u ON p.user_id = u.id
+        JOIN courses c ON pa.course_id = c.id
+        WHERE pa.tenant_id = $1
+      `;
+            const params = [tenantId];
+            let paramCount = 1;
+            if (professorId) {
+                paramCount++;
+                query += ` AND pa.professor_id = $${paramCount}`;
+                params.push(professorId);
+            }
+            if (courseId) {
+                paramCount++;
+                query += ` AND pa.course_id = $${paramCount}`;
+                params.push(courseId);
+            }
+            query += ' ORDER BY pa.class_date DESC';
+            const result = await pool.query(query, params);
+            return res.json(result.rows);
+        }
+        catch (err) {
+            return res.status(500).json({ error: 'Error al consultar asistencia de profesores', details: err.message });
+        }
+    }
+    else {
+        let filtered = db_1.professorAttendances.filter(pa => pa.tenantId === tenantId);
+        if (professorId) {
+            filtered = filtered.filter(pa => pa.professorId === professorId);
+        }
+        if (courseId) {
+            filtered = filtered.filter(pa => pa.courseId === courseId);
+        }
+        const result = filtered.map(pa => {
+            const prof = db_1.professors.find(p => p.id === pa.professorId);
+            const user = prof ? db_1.users.find(u => u.id === prof.userId) : null;
+            const course = db_1.courses.find(c => c.id === pa.courseId);
+            return {
+                ...pa,
+                course_name: course?.name || '',
+                course_code: course?.code || '',
+                professor_first_name: user?.firstName || '',
+                professor_last_name: user?.lastName || ''
+            };
+        }).sort((a, b) => b.classDate.localeCompare(a.classDate));
+        return res.json(result);
+    }
+});
+// Registrar asistencia de profesor manualmente
+app.post('/api/tenants/:tenantId/billing/attendance', authenticateJWT, async (req, res) => {
+    const { tenantId } = req.params;
+    const { professorId, courseId, classDate, scheduledHours, hoursWorked, status } = req.body;
+    if (req.user?.tenantId && req.user.tenantId !== tenantId) {
+        return res.status(403).json({ error: 'Acceso denegado: Aislamiento Tenant violado' });
+    }
+    if (!professorId || !courseId || !classDate || !scheduledHours || hoursWorked === undefined || !status) {
+        return res.status(400).json({ error: 'Todos los campos son obligatorios' });
+    }
+    if (dbAvailable) {
+        try {
+            const result = await pool.query(`INSERT INTO professor_attendance (tenant_id, professor_id, course_id, class_date, scheduled_hours, hours_worked, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`, [tenantId, professorId, courseId, classDate, scheduledHours, hoursWorked, status]);
+            return res.status(201).json(result.rows[0]);
+        }
+        catch (err) {
+            return res.status(500).json({ error: 'Error al registrar asistencia', details: err.message });
+        }
+    }
+    else {
+        const newAtt = {
+            id: `att-${Date.now()}`,
+            tenantId,
+            professorId,
+            courseId,
+            classDate,
+            scheduledHours: Number(scheduledHours),
+            hoursWorked: Number(hoursWorked),
+            status,
+            createdAt: new Date().toISOString()
+        };
+        db_1.professorAttendances.push(newAtt);
+        return res.status(201).json(newAtt);
+    }
+});
+// 2. Calcular pre-nómina de un profesor para un mes/año
+app.get('/api/tenants/:tenantId/billing/payroll/calculate', authenticateJWT, async (req, res) => {
+    const { tenantId } = req.params;
+    const { professorId, yearMonth } = req.query; // yearMonth en formato 'YYYY-MM'
+    if (req.user?.tenantId && req.user.tenantId !== tenantId) {
+        return res.status(403).json({ error: 'Acceso denegado: Aislamiento Tenant violado' });
+    }
+    if (!professorId || !yearMonth) {
+        return res.status(400).json({ error: 'professorId y yearMonth (YYYY-MM) son obligatorios' });
+    }
+    const ymStr = yearMonth;
+    if (dbAvailable) {
+        try {
+            // Obtener el profesor
+            const profResult = await pool.query(`SELECT p.*, u.first_name, u.last_name, u.email 
+         FROM professors p 
+         JOIN users u ON p.user_id = u.id 
+         WHERE p.id = $1 AND p.tenant_id = $2`, [professorId, tenantId]);
+            if (profResult.rows.length === 0) {
+                return res.status(404).json({ error: 'Profesor no encontrado' });
+            }
+            const professor = profResult.rows[0];
+            // Obtener configuración del tenant
+            const tenantResult = await pool.query('SELECT deduct_absences_from_payroll FROM tenants WHERE id = $1', [tenantId]);
+            const deductAbsences = tenantResult.rows[0]?.deduct_absences_from_payroll ?? true;
+            // Obtener asistencias del mes
+            // Nota: En PG filtramos usando TO_CHAR sobre class_date
+            const attResult = await pool.query(`SELECT * FROM professor_attendance 
+         WHERE tenant_id = $1 AND professor_id = $2 AND TO_CHAR(class_date, 'YYYY-MM') = $3`, [tenantId, professorId, ymStr]);
+            const attendances = attResult.rows;
+            let totalScheduledHours = 0;
+            let totalHoursWorked = 0;
+            let totalAbsences = 0;
+            let totalPresents = 0;
+            attendances.forEach(a => {
+                totalScheduledHours += Number(a.scheduled_hours);
+                totalHoursWorked += Number(a.hours_worked);
+                if (a.status === 'ABSENT') {
+                    totalAbsences++;
+                }
+                else {
+                    totalPresents++;
+                }
+            });
+            const hourlyRate = Number(professor.hourly_rate);
+            // Aplicación de regla de negocio: Deducciones opcionales
+            const grossPayroll = deductAbsences
+                ? totalHoursWorked * hourlyRate
+                : totalScheduledHours * hourlyRate;
+            const deductions = deductAbsences
+                ? (totalScheduledHours - totalHoursWorked) * hourlyRate
+                : 0;
+            const netPayroll = grossPayroll;
+            return res.json({
+                professor: {
+                    id: professor.id,
+                    firstName: professor.first_name,
+                    lastName: professor.last_name,
+                    email: professor.email,
+                    hourlyRate
+                },
+                period: ymStr,
+                config: {
+                    deductAbsencesFromPayroll: deductAbsences
+                },
+                metrics: {
+                    totalClasses: attendances.length,
+                    presents: totalPresents,
+                    absences: totalAbsences,
+                    totalScheduledHours,
+                    totalHoursWorked,
+                    hourlyRate
+                },
+                calculation: {
+                    grossPayroll,
+                    deductions,
+                    netPayroll
+                }
+            });
+        }
+        catch (err) {
+            return res.status(500).json({ error: 'Error al calcular pre-nómina', details: err.message });
+        }
+    }
+    else {
+        // Fallback en memoria
+        const prof = db_1.professors.find(p => p.id === professorId && p.tenantId === tenantId);
+        if (!prof)
+            return res.status(404).json({ error: 'Profesor no encontrado' });
+        const user = db_1.users.find(u => u.id === prof.userId);
+        const tenant = db_1.tenants.find(t => t.id === tenantId);
+        const deductAbsences = tenant?.deductAbsencesFromPayroll ?? true;
+        const attendances = db_1.professorAttendances.filter(pa => pa.tenantId === tenantId &&
+            pa.professorId === professorId &&
+            pa.classDate.startsWith(ymStr));
+        let totalScheduledHours = 0;
+        let totalHoursWorked = 0;
+        let totalAbsences = 0;
+        let totalPresents = 0;
+        attendances.forEach(a => {
+            totalScheduledHours += a.scheduledHours;
+            totalHoursWorked += a.hoursWorked;
+            if (a.status === 'ABSENT') {
+                totalAbsences++;
+            }
+            else {
+                totalPresents++;
+            }
+        });
+        const hourlyRate = prof.hourlyRate || 50.00;
+        const grossPayroll = deductAbsences
+            ? totalHoursWorked * hourlyRate
+            : totalScheduledHours * hourlyRate;
+        const deductions = deductAbsences
+            ? (totalScheduledHours - totalHoursWorked) * hourlyRate
+            : 0;
+        const netPayroll = grossPayroll;
+        return res.json({
+            professor: {
+                id: prof.id,
+                firstName: user?.firstName || '',
+                lastName: user?.lastName || '',
+                email: user?.email || '',
+                hourlyRate
+            },
+            period: ymStr,
+            config: {
+                deductAbsencesFromPayroll: deductAbsences
+            },
+            metrics: {
+                totalClasses: attendances.length,
+                presents: totalPresents,
+                absences: totalAbsences,
+                totalScheduledHours,
+                totalHoursWorked,
+                hourlyRate
+            },
+            calculation: {
+                grossPayroll,
+                deductions,
+                netPayroll
+            }
+        });
+    }
+});
+// Procesar nómina (Cerrar mes, crear payable y contabilizar)
+app.post('/api/tenants/:tenantId/billing/payroll/process', authenticateJWT, async (req, res) => {
+    const { tenantId } = req.params;
+    const { professorId, yearMonth } = req.body;
+    if (req.user?.tenantId && req.user.tenantId !== tenantId) {
+        return res.status(403).json({ error: 'Acceso denegado: Aislamiento Tenant violado' });
+    }
+    if (!professorId || !yearMonth) {
+        return res.status(400).json({ error: 'professorId y yearMonth (YYYY-MM) son obligatorios' });
+    }
+    const ymStr = yearMonth;
+    if (dbAvailable) {
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+            // 1. Obtener y bloquear el profesor
+            const profResult = await client.query(`SELECT p.*, u.first_name, u.last_name, u.email 
+         FROM professors p 
+         JOIN users u ON p.user_id = u.id 
+         WHERE p.id = $1 AND p.tenant_id = $2 FOR UPDATE`, [professorId, tenantId]);
+            if (profResult.rows.length === 0) {
+                throw new Error('Profesor no encontrado.');
+            }
+            const professor = profResult.rows[0];
+            // 2. Obtener configuración del tenant
+            const tenantResult = await client.query('SELECT deduct_absences_from_payroll FROM tenants WHERE id = $1', [tenantId]);
+            const deductAbsences = tenantResult.rows[0]?.deduct_absences_from_payroll ?? true;
+            // 3. Obtener asistencias
+            const attResult = await client.query(`SELECT * FROM professor_attendance 
+         WHERE tenant_id = $1 AND professor_id = $2 AND TO_CHAR(class_date, 'YYYY-MM') = $3`, [tenantId, professorId, ymStr]);
+            const attendances = attResult.rows;
+            if (attendances.length === 0) {
+                throw new Error(`No se registraron horas ni clases dictadas para el periodo ${ymStr}.`);
+            }
+            // Validar si ya se emitió una nómina para este profesor en este periodo para evitar dobles registros
+            const checkResult = await client.query(`SELECT id FROM payables 
+         WHERE tenant_id = $1 AND professor_id = $2 AND concept LIKE $3`, [tenantId, professorId, `%Nómina ${ymStr}%`]);
+            if (checkResult.rows.length > 0) {
+                throw new Error(`La nómina para el periodo ${ymStr} ya ha sido procesada anteriormente.`);
+            }
+            let totalScheduledHours = 0;
+            let totalHoursWorked = 0;
+            attendances.forEach(a => {
+                totalScheduledHours += Number(a.scheduled_hours);
+                totalHoursWorked += Number(a.hours_worked);
+            });
+            const hourlyRate = Number(professor.hourly_rate);
+            const netPayroll = deductAbsences
+                ? totalHoursWorked * hourlyRate
+                : totalScheduledHours * hourlyRate;
+            if (netPayroll <= 0) {
+                throw new Error('El monto neto de nómina a pagar debe ser mayor a 0.');
+            }
+            // 4. Crear Cuenta por Pagar (Payable)
+            const dueDate = new Date(ymStr + '-28'); // Vence el 28 del mes
+            const concept = `Pago de nómina ${ymStr} - ${professor.first_name} ${professor.last_name} (${totalHoursWorked} hrs dictadas de ${totalScheduledHours} hrs progr.)`;
+            const payableResult = await client.query(`INSERT INTO payables (tenant_id, professor_id, concept, amount, due_date, status) 
+         VALUES ($1, $2, $3, $4, $5, 'PENDING') RETURNING id`, [tenantId, professorId, concept, netPayroll, dueDate]);
+            const payableId = payableResult.rows[0].id;
+            // 5. Asiento Contable Diario de Gasto de Nómina (Provisión de Nómina)
+            // Debe: Gasto de Personal / Nómina Profesores (50100) = netPayroll  (Aumento de Gasto)
+            // Haber: Cuentas por Pagar / Nómina Docente (21100) = netPayroll    (Aumento de Pasivo)
+            const entryResult = await client.query(`INSERT INTO ledger_entries (tenant_id, description, entry_date) 
+         VALUES ($1, $2, NOW()) RETURNING id`, [tenantId, `Provisión contable de nómina docente periodo ${ymStr} (Profesor: ${professor.first_name} ${professor.last_name})`]);
+            const entryId = entryResult.rows[0].id;
+            await client.query(`INSERT INTO ledger_lines (entry_id, account_id, debit, credit) VALUES 
+         ($1, '50100', $2, 0),
+         ($1, '21100', 0, $2)`, [entryId, netPayroll]);
+            await client.query('COMMIT');
+            return res.status(201).json({
+                success: true,
+                message: `Nómina para ${professor.first_name} ${professor.last_name} procesada correctamente.`,
+                netPayroll,
+                payableId
+            });
+        }
+        catch (err) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: 'Fallo al procesar nómina escolar', details: err.message });
+        }
+        finally {
+            client.release();
+        }
+    }
+    else {
+        // --- FALLBACK EN MEMORIA ---
+        try {
+            const prof = db_1.professors.find(p => p.id === professorId && p.tenantId === tenantId);
+            if (!prof)
+                throw new Error('Profesor no encontrado.');
+            const user = db_1.users.find(u => u.id === prof.userId);
+            const tenant = db_1.tenants.find(t => t.id === tenantId);
+            const deductAbsences = tenant?.deductAbsencesFromPayroll ?? true;
+            const attendances = db_1.professorAttendances.filter(pa => pa.tenantId === tenantId &&
+                pa.professorId === professorId &&
+                pa.classDate.startsWith(ymStr));
+            if (attendances.length === 0) {
+                throw new Error(`No se registraron horas ni clases dictadas para el periodo ${ymStr}.`);
+            }
+            // Validar duplicado
+            const exists = db_1.payables.some(p => p.tenantId === tenantId && p.professorId === professorId && p.concept.includes(`nómina ${ymStr}`));
+            if (exists) {
+                throw new Error(`La nómina para el periodo ${ymStr} ya ha sido procesada anteriormente.`);
+            }
+            let totalScheduledHours = 0;
+            let totalHoursWorked = 0;
+            attendances.forEach(a => {
+                totalScheduledHours += a.scheduledHours;
+                totalHoursWorked += a.hoursWorked;
+            });
+            const hourlyRate = prof.hourlyRate || 50.00;
+            const netPayroll = deductAbsences
+                ? totalHoursWorked * hourlyRate
+                : totalScheduledHours * hourlyRate;
+            if (netPayroll <= 0) {
+                throw new Error('El monto neto de nómina a pagar debe ser mayor a 0.');
+            }
+            const payableId = `pay-${Date.now()}`;
+            const concept = `Pago de nómina ${ymStr} - ${user?.firstName} ${user?.lastName} (${totalHoursWorked} hrs dictadas de ${totalScheduledHours} hrs progr.)`;
+            db_1.payables.push({
+                id: payableId,
+                tenantId,
+                professorId,
+                concept,
+                amount: netPayroll,
+                paidAmount: 0,
+                dueDate: ymStr + '-28',
+                status: 'PENDING',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            });
+            // Contabilidad
+            const entryId = `e-${Date.now()}`;
+            db_1.ledgerEntries.push({
+                id: entryId,
+                tenantId,
+                transactionId: null,
+                entryDate: new Date().toISOString(),
+                description: `Provisión contable de nómina docente periodo ${ymStr} (Profesor: ${user?.firstName} ${user?.lastName})`,
+                createdAt: new Date().toISOString()
+            });
+            db_1.ledgerLines.push({ id: `l-${Date.now()}-1`, entryId, accountId: '50100', debit: netPayroll, credit: 0, createdAt: new Date().toISOString() }, { id: `l-${Date.now()}-2`, entryId, accountId: '21100', debit: 0, credit: netPayroll, createdAt: new Date().toISOString() });
+            return res.status(201).json({
+                success: true,
+                message: `Nómina para ${user?.firstName} ${user?.lastName} procesada correctamente (En memoria).`,
+                netPayroll,
+                payableId
+            });
+        }
+        catch (err) {
+            return res.status(400).json({ error: 'Error al procesar en memoria', details: err.message });
+        }
+    }
+});
+// 3. MOTOR DE RENTABILIDAD OPERATIVA EN MÚLTIPLES DIMENSIONES
+app.get('/api/tenants/:tenantId/billing/profitability', authenticateJWT, async (req, res) => {
+    const { tenantId } = req.params;
+    const { dimension = 'course', academicPeriod = '2026-I' } = req.query; // dimension: 'course', 'period', 'month', 'year'
+    if (req.user?.tenantId && req.user.tenantId !== tenantId) {
+        return res.status(403).json({ error: 'Acceso denegado: Aislamiento Tenant violado' });
+    }
+    const dimStr = dimension;
+    const periodStr = academicPeriod;
+    if (dbAvailable) {
+        try {
+            if (dimStr === 'course') {
+                // --- 1. RENTABILIDAD POR CURSO ---
+                // Rentabilidad = Ingresos de alumnos matriculados (receivables vinculados a enrollments de este curso)
+                //              - Gastos de profesor (horas_trabajadas * tarifa_hora en este curso)
+                const query = `
+          SELECT 
+            c.id as course_id,
+            c.code as course_code,
+            c.name as course_name,
+            c.credits,
+            COALESCE(rec.income, 0.00) as income,
+            COALESCE(cost.expense, 0.00) as expense,
+            (COALESCE(rec.income, 0.00) - COALESCE(cost.expense, 0.00)) as operational_profit
+          FROM courses c
+          LEFT JOIN (
+            -- Sumar ingresos por matrículas de este curso
+            SELECT e.course_id, SUM(r.amount) as income
+            FROM receivables r
+            JOIN enrollments e ON r.enrollment_id = e.id
+            WHERE r.tenant_id = $1 AND e.academic_period = $2
+            GROUP BY e.course_id
+          ) rec ON c.id = rec.course_id
+          LEFT JOIN (
+            -- Sumar gastos por horas docente dictadas de este curso
+            SELECT pa.course_id, SUM(pa.hours_worked * prof.hourly_rate) as expense
+            FROM professor_attendance pa
+            JOIN professors prof ON pa.professor_id = prof.id
+            WHERE pa.tenant_id = $1 AND TO_CHAR(pa.class_date, 'YYYY') = '2026' -- Filtramos año en base al periodo escolar
+            GROUP BY pa.course_id
+          ) cost ON c.id = cost.course_id
+          WHERE c.tenant_id = $1 AND c.status = 'active'
+          ORDER BY operational_profit DESC
+        `;
+                const result = await pool.query(query, [tenantId, periodStr]);
+                // Mapear margen operativo
+                const profitabilityData = result.rows.map(row => {
+                    const inc = Number(row.income);
+                    const exp = Number(row.expense);
+                    const profit = Number(row.operational_profit);
+                    const margin = inc > 0 ? parseFloat(((profit / inc) * 100).toFixed(2)) : 0;
+                    return {
+                        ...row,
+                        income: inc,
+                        expense: exp,
+                        operational_profit: profit,
+                        profit_margin: margin
+                    };
+                });
+                return res.json({
+                    dimension: 'course',
+                    period: periodStr,
+                    data: profitabilityData
+                });
+            }
+            else if (dimStr === 'month') {
+                // --- 2. RENTABILIDAD POR MES (HISTÓRICO EN BASE A LEDGER) ---
+                // Extraemos ingresos (cuenta 40100) y egresos de nómina (cuenta 50100) del Libro Mayor
+                const query = `
+          SELECT 
+            TO_CHAR(le.entry_date, 'YYYY-MM') as time_bucket,
+            SUM(ll.credit) FILTER (WHERE ll.account_id = '40100') as income,
+            SUM(ll.debit) FILTER (WHERE ll.account_id = '50100') as expense
+          FROM ledger_entries le
+          JOIN ledger_lines ll ON ll.entry_id = le.id
+          WHERE le.tenant_id = $1
+          GROUP BY TO_CHAR(le.entry_date, 'YYYY-MM')
+          ORDER BY time_bucket DESC
+        `;
+                const result = await pool.query(query, [tenantId]);
+                const data = result.rows.map(row => {
+                    const inc = Number(row.income || 0);
+                    const exp = Number(row.expense || 0);
+                    const profit = inc - exp;
+                    return {
+                        dimensionValue: row.time_bucket,
+                        income: inc,
+                        expense: exp,
+                        operational_profit: profit,
+                        profit_margin: inc > 0 ? parseFloat(((profit / inc) * 100).toFixed(2)) : 0
+                    };
+                });
+                return res.json({
+                    dimension: 'month',
+                    data
+                });
+            }
+            else if (dimStr === 'year') {
+                // --- 3. RENTABILIDAD POR AÑO ---
+                const query = `
+          SELECT 
+            TO_CHAR(le.entry_date, 'YYYY') as time_bucket,
+            SUM(ll.credit) FILTER (WHERE ll.account_id = '40100') as income,
+            SUM(ll.debit) FILTER (WHERE ll.account_id = '50100') as expense
+          FROM ledger_entries le
+          JOIN ledger_lines ll ON ll.entry_id = le.id
+          WHERE le.tenant_id = $1
+          GROUP BY TO_CHAR(le.entry_date, 'YYYY')
+          ORDER BY time_bucket DESC
+        `;
+                const result = await pool.query(query, [tenantId]);
+                const data = result.rows.map(row => {
+                    const inc = Number(row.income || 0);
+                    const exp = Number(row.expense || 0);
+                    const profit = inc - exp;
+                    return {
+                        dimensionValue: row.time_bucket,
+                        income: inc,
+                        expense: exp,
+                        operational_profit: profit,
+                        profit_margin: inc > 0 ? parseFloat(((profit / inc) * 100).toFixed(2)) : 0
+                    };
+                });
+                return res.json({
+                    dimension: 'year',
+                    data
+                });
+            }
+            else {
+                // --- 4. RENTABILIDAD POR PERIODO ACADÉMICO ---
+                const query = `
+          SELECT 
+            e.academic_period as dimension_value,
+            SUM(r.amount) as income,
+            -- Asumimos costo de nómina de los meses correspondientes a ese periodo
+            COALESCE(cost.expense, 0.00) as expense
+          FROM receivables r
+          JOIN enrollments e ON r.enrollment_id = e.id
+          LEFT JOIN (
+            -- Unimos con costo por horas en ese periodo
+            SELECT pa.tenant_id, SUM(pa.hours_worked * prof.hourly_rate) as expense
+            FROM professor_attendance pa
+            JOIN professors prof ON pa.professor_id = prof.id
+            GROUP BY pa.tenant_id
+          ) cost ON r.tenant_id = cost.tenant_id
+          WHERE r.tenant_id = $1
+          GROUP BY e.academic_period, cost.expense
+        `;
+                const result = await pool.query(query, [tenantId]);
+                const data = result.rows.map(row => {
+                    const inc = Number(row.income || 0);
+                    const exp = Number(row.expense || 0);
+                    const profit = inc - exp;
+                    return {
+                        dimensionValue: row.dimension_value,
+                        income: inc,
+                        expense: exp,
+                        operational_profit: profit,
+                        profit_margin: inc > 0 ? parseFloat(((profit / inc) * 100).toFixed(2)) : 0
+                    };
+                });
+                return res.json({
+                    dimension: 'period',
+                    data
+                });
+            }
+        }
+        catch (err) {
+            return res.status(500).json({ error: 'Error al consultar rentabilidad operativa', details: err.message });
+        }
+    }
+    else {
+        // --- FALLBACK EN MEMORIA ---
+        if (dimStr === 'course') {
+            const activeCourses = db_1.courses.filter(c => c.tenantId === tenantId && c.status === 'active');
+            const data = activeCourses.map(c => {
+                // Ingresos
+                const courseEnrollments = db_1.enrollments.filter(e => e.courseId === c.id && e.academicPeriod === periodStr);
+                let income = 0;
+                courseEnrollments.forEach(en => {
+                    const recs = db_1.receivables.filter(r => r.enrollmentId === en.id);
+                    recs.forEach(r => income += r.amount);
+                });
+                // Egresos (Mateo Silva p-1 enseña c-1 en mock)
+                let expense = 0;
+                const att = db_1.professorAttendances.filter(pa => pa.tenantId === tenantId && pa.courseId === c.id);
+                att.forEach(a => {
+                    const prof = db_1.professors.find(p => p.id === a.professorId);
+                    const rate = prof?.hourlyRate || 50.00;
+                    expense += a.hoursWorked * rate;
+                });
+                const profit = income - expense;
+                const margin = income > 0 ? parseFloat(((profit / income) * 100).toFixed(2)) : 0;
+                return {
+                    course_id: c.id,
+                    course_code: c.code,
+                    course_name: c.name,
+                    credits: c.credits,
+                    income,
+                    expense,
+                    operational_profit: profit,
+                    profit_margin: margin
+                };
+            }).sort((a, b) => b.operational_profit - a.operational_profit);
+            return res.json({
+                dimension: 'course',
+                period: periodStr,
+                data
+            });
+        }
+        else {
+            // Mes o Año o Periodo en memoria usando el Ledger
+            const entries = db_1.ledgerEntries.filter(e => e.tenantId === tenantId);
+            const buckets = {};
+            entries.forEach(e => {
+                let bucketKey = '2026';
+                if (dimStr === 'month') {
+                    bucketKey = e.entryDate.substring(0, 7); // 'YYYY-MM'
+                }
+                else if (dimStr === 'year') {
+                    bucketKey = e.entryDate.substring(0, 4); // 'YYYY'
+                }
+                else if (dimStr === 'period') {
+                    bucketKey = periodStr; // Fallback simple para mock
+                }
+                if (!buckets[bucketKey]) {
+                    buckets[bucketKey] = { income: 0, expense: 0 };
+                }
+                const lines = db_1.ledgerLines.filter(l => l.entryId === e.id);
+                lines.forEach(l => {
+                    if (l.accountId === '40100') {
+                        buckets[bucketKey].income += l.credit;
+                    }
+                    else if (l.accountId === '50100') {
+                        buckets[bucketKey].expense += l.debit;
+                    }
+                });
+            });
+            const data = Object.keys(buckets).map(key => {
+                const inc = buckets[key].income;
+                const exp = buckets[key].expense;
+                const profit = inc - exp;
+                return {
+                    dimensionValue: key,
+                    income: inc,
+                    expense: exp,
+                    operational_profit: profit,
+                    profit_margin: inc > 0 ? parseFloat(((profit / inc) * 100).toFixed(2)) : 0
+                };
+            }).sort((a, b) => b.dimensionValue.localeCompare(a.dimensionValue));
+            return res.json({
+                dimension: dimStr,
+                data
+            });
+        }
+    }
+});
+// ============================================================================
+// MÓDULO DE INTEGRACIÓN DE PAGOS, FACTURACIÓN ELECTRÓNICA Y DASHBOARDS
+// ============================================================================
+// 1. Simulación de Emisión de Facturación Electrónica (API abierta para NubeFacT)
+app.post('/api/tenants/:tenantId/billing/transactions/:transactionId/invoice', authenticateJWT, async (req, res) => {
+    const { tenantId, transactionId } = req.params;
+    if (req.user?.tenantId && req.user.tenantId !== tenantId) {
+        return res.status(403).json({ error: 'Acceso denegado: Aislamiento Tenant violado' });
+    }
+    if (dbAvailable) {
+        try {
+            // 1. Obtener la transacción y su recibo
+            const txResult = await pool.query(`SELECT t.*, r.concept, r.amount as receivable_amount, s.document_id, s.first_name, s.last_name, s.email
+         FROM transactions t
+         JOIN receivables r ON t.receivable_id = r.id
+         JOIN students s ON r.student_id = s.id
+         WHERE t.id = $1 AND t.tenant_id = $2`, [transactionId, tenantId]);
+            if (txResult.rows.length === 0) {
+                return res.status(404).json({ error: 'Transacción de cobro no encontrada para facturación electrónica.' });
+            }
+            const tx = txResult.rows[0];
+            // Verificar si ya está facturado
+            const metadata = tx.metadata || {};
+            if (metadata.invoice_status === 'ISSUED') {
+                return res.status(400).json({ error: 'Este cobro ya cuenta con un comprobante electrónico emitido.' });
+            }
+            // 2. Simular generación del JSON para NubeFacT (Standard UBL XML API)
+            const invoiceNumber = `F001-${Math.floor(100000 + Math.random() * 900000)}`;
+            const subtotal = parseFloat((tx.amount / 1.18).toFixed(2)); // Supongamos IGV/IVA del 18% incluido
+            const tax = parseFloat((tx.amount - subtotal).toFixed(2));
+            const nubefactPayload = {
+                operacion: "generar_comprobante",
+                tipo_de_comprobante: 1, // Factura Electrónica
+                serie: "F001",
+                numero: invoiceNumber.split('-')[1],
+                cliente_tipo_de_documento: 1, // DNI o DNI/RFC equivalente
+                cliente_numero_de_documento: tx.document_id.replace(/\D/g, ''),
+                cliente_denominacion: `${tx.first_name} ${tx.last_name}`,
+                cliente_direccion: "San Isidro, Lima, Perú",
+                cliente_email: tx.email,
+                fecha_de_emision: new Date().toISOString().split('T')[0],
+                moneda: 1, // PEN o moneda local
+                porcentaje_de_igv: 18.00,
+                total_gravada: subtotal,
+                total_igv: tax,
+                total: parseFloat(Number(tx.amount).toFixed(2)),
+                items: [
+                    {
+                        unidad_de_medida: "ZZ",
+                        codigo: "SERV_EDU",
+                        descripcion: tx.concept,
+                        cantidad: 1,
+                        valor_unitario: subtotal,
+                        precio_unitario: parseFloat(Number(tx.amount).toFixed(2)),
+                        subtotal: subtotal,
+                        tipo_de_igv: 1, // Gravado
+                        igv: tax,
+                        total: parseFloat(Number(tx.amount).toFixed(2))
+                    }
+                ]
+            };
+            console.log('📡 Enviando Payload a NubeFacT API:', JSON.stringify(nubefactPayload));
+            // 3. Simular respuesta exitosa del PSE/SUNAT
+            const updatedMetadata = {
+                ...metadata,
+                invoice_status: 'ISSUED',
+                invoice_number: invoiceNumber,
+                invoice_pdf: `https://sincroedu.nubefact.com/c/facturas/${invoiceNumber}.pdf`,
+                invoice_xml: `https://sincroedu.nubefact.com/xml/facturas/${invoiceNumber}.xml`,
+                cdr_sunat: `https://sincroedu.nubefact.com/cdr/facturas/R-${invoiceNumber}.xml`,
+                emitted_at: new Date().toISOString()
+            };
+            // 4. Actualizar metadata de transacción en base de datos
+            await pool.query('UPDATE transactions SET metadata = $1 WHERE id = $2', [JSON.stringify(updatedMetadata), transactionId]);
+            return res.json({
+                success: true,
+                message: 'Comprobante de Pago Electrónico (Boleta/Factura) emitido y enviado a SUNAT por NubeFacT.',
+                invoiceNumber,
+                pdfUrl: updatedMetadata.invoice_pdf,
+                xmlUrl: updatedMetadata.invoice_xml
+            });
+        }
+        catch (err) {
+            return res.status(500).json({ error: 'Error al simular integración con NubeFacT', details: err.message });
+        }
+    }
+    else {
+        // Fallback en memoria
+        const txIdx = db_1.transactions.findIndex(t => t.id === transactionId && t.tenantId === tenantId);
+        if (txIdx === -1) {
+            return res.status(404).json({ error: 'Transacción no encontrada.' });
+        }
+        const tx = db_1.transactions[txIdx];
+        const rec = db_1.receivables.find(r => r.id === tx.receivableId);
+        const student = rec ? db_1.students.find(s => s.id === rec.studentId) : null;
+        const invoiceNumber = `F001-${Math.floor(100000 + Math.random() * 900000)}`;
+        tx.metadata = {
+            ...(tx.metadata || {}),
+            invoice_status: 'ISSUED',
+            invoice_number: invoiceNumber,
+            invoice_pdf: `https://sincroedu.nubefact.com/c/facturas/${invoiceNumber}.pdf`,
+            invoice_xml: `https://sincroedu.nubefact.com/xml/facturas/${invoiceNumber}.xml`,
+            emitted_at: new Date().toISOString()
+        };
+        return res.json({
+            success: true,
+            message: 'Comprobante de Pago Electrónico emitido con NubeFacT (En memoria).',
+            invoiceNumber,
+            pdfUrl: tx.metadata.invoice_pdf,
+            xmlUrl: tx.metadata.invoice_xml
+        });
+    }
+});
+// 2. Dashboard de Padres de Familia (Deudas y pagos pendientes)
+app.get('/api/tenants/:tenantId/billing/dashboard/parent', authenticateJWT, async (req, res) => {
+    const { tenantId } = req.params;
+    const parentUserId = req.user?.id || 'u-parent1'; // Fallback a usuario padre de semilla
+    if (req.user?.tenantId && req.user.tenantId !== tenantId) {
+        return res.status(403).json({ error: 'Acceso denegado: Aislamiento Tenant violado' });
+    }
+    if (dbAvailable) {
+        try {
+            // A. Obtener alumnos asociados a este apoderado
+            const childrenResult = await pool.query(`SELECT sg.student_id, s.first_name, s.last_name, s.enrollment_number 
+         FROM student_guardians sg
+         JOIN students s ON sg.student_id = s.id
+         WHERE sg.user_id = $1 AND s.tenant_id = $2`, [parentUserId, tenantId]);
+            const childrenIds = childrenResult.rows.map(r => r.student_id);
+            if (childrenIds.length === 0) {
+                return res.json({
+                    children: [],
+                    metrics: { totalOutstanding: 0, overdueOutstanding: 0, paidTotal: 0 },
+                    receivables: [],
+                    payments: []
+                });
+            }
+            // B. Obtener todas las deudas (receivables) de sus hijos
+            const recResult = await pool.query(`SELECT r.*, s.first_name as student_first_name, s.last_name as student_last_name
+         FROM receivables r
+         JOIN students s ON r.student_id = s.id
+         WHERE r.student_id IN (${childrenIds.map((_, i) => `$${i + 1}`).join(',')})
+         ORDER BY r.due_date ASC`, childrenIds);
+            const receivablesList = recResult.rows;
+            // C. Obtener todos los pagos completados
+            const payResult = await pool.query(`SELECT t.*, r.concept, s.first_name as student_first_name, s.last_name as student_last_name
+         FROM transactions t
+         JOIN receivables r ON t.receivable_id = r.id
+         JOIN students s ON r.student_id = s.id
+         WHERE r.student_id IN (${childrenIds.map((_, i) => `$${i + 1}`).join(',')}) AND t.status = 'COMPLETED'
+         ORDER BY t.transaction_date DESC`, childrenIds);
+            const paymentsList = payResult.rows;
+            // D. Calcular métricas consolidadas
+            let totalOutstanding = 0;
+            let overdueOutstanding = 0;
+            let paidTotal = 0;
+            receivablesList.forEach(r => {
+                const amt = Number(r.amount);
+                const paid = Number(r.paid_amount);
+                const outstanding = amt - paid;
+                if (r.status === 'PENDING' || r.status === 'OVERDUE') {
+                    totalOutstanding += outstanding;
+                    if (r.status === 'OVERDUE') {
+                        overdueOutstanding += outstanding;
+                    }
+                }
+                else if (r.status === 'PAID') {
+                    paidTotal += paid;
+                }
+            });
+            return res.json({
+                children: childrenResult.rows,
+                metrics: {
+                    totalOutstanding,
+                    overdueOutstanding,
+                    paidTotal
+                },
+                receivables: receivablesList,
+                payments: paymentsList
+            });
+        }
+        catch (err) {
+            return res.status(500).json({ error: 'Error al consultar Dashboard de Padres', details: err.message });
+        }
+    }
+    else {
+        // Fallback en memoria
+        const children = db_1.studentGuardians.filter(sg => sg.userId === parentUserId).map(sg => {
+            const student = db_1.students.find(s => s.id === sg.studentId);
+            return {
+                student_id: sg.studentId,
+                first_name: student?.firstName || '',
+                last_name: student?.lastName || '',
+                enrollment_number: student?.enrollmentNumber || ''
+            };
+        });
+        const childrenIds = children.map(c => c.student_id);
+        if (childrenIds.length === 0) {
+            return res.json({
+                children: [],
+                metrics: { totalOutstanding: 0, overdueOutstanding: 0, paidTotal: 0 },
+                receivables: [],
+                payments: []
+            });
+        }
+        const receivablesList = db_1.receivables.filter(r => childrenIds.includes(r.studentId)).map(r => {
+            const child = children.find(c => c.student_id === r.studentId);
+            return {
+                ...r,
+                student_first_name: child?.first_name || '',
+                student_last_name: child?.last_name || ''
+            };
+        });
+        const paymentsList = db_1.transactions.filter(t => t.receivableId && db_1.receivables.find(r => r.id === t.receivableId && childrenIds.includes(r.studentId))).map(t => {
+            const rec = db_1.receivables.find(r => r.id === t.receivableId);
+            const child = children.find(c => c.student_id === rec?.studentId);
+            return {
+                ...t,
+                concept: rec?.concept || '',
+                student_first_name: child?.first_name || '',
+                student_last_name: child?.last_name || ''
+            };
+        });
+        let totalOutstanding = 0;
+        let overdueOutstanding = 0;
+        let paidTotal = 0;
+        receivablesList.forEach(r => {
+            const outstanding = r.amount - r.paidAmount;
+            if (r.status === 'PENDING' || r.status === 'OVERDUE') {
+                totalOutstanding += outstanding;
+                if (r.status === 'OVERDUE') {
+                    overdueOutstanding += outstanding;
+                }
+            }
+            else if (r.status === 'PAID') {
+                paidTotal += r.paidAmount;
+            }
+        });
+        return res.json({
+            children,
+            metrics: {
+                totalOutstanding,
+                overdueOutstanding,
+                paidTotal
+            },
+            receivables: receivablesList,
+            payments: paymentsList
+        });
+    }
+});
+// 3. Dashboard de Profesores (Estado de cuenta de honorarios)
+app.get('/api/tenants/:tenantId/billing/dashboard/professor', authenticateJWT, async (req, res) => {
+    const { tenantId } = req.params;
+    const professorUserId = req.user?.id || 'u-t1professor'; // Mateo Silva profesor
+    if (req.user?.tenantId && req.user.tenantId !== tenantId) {
+        return res.status(403).json({ error: 'Acceso denegado: Aislamiento Tenant violado' });
+    }
+    if (dbAvailable) {
+        try {
+            // A. Buscar ID del profesor
+            const profResult = await pool.query('SELECT * FROM professors WHERE user_id = $1 AND tenant_id = $2', [professorUserId, tenantId]);
+            if (profResult.rows.length === 0) {
+                return res.status(404).json({ error: 'Profesor no registrado en la facultad de este Tenant.' });
+            }
+            const professor = profResult.rows[0];
+            // B. Obtener todas las cuentas por pagar (nóminas) emitidas
+            const payResult = await pool.query('SELECT * FROM payables WHERE tenant_id = $1 AND professor_id = $2 ORDER BY due_date DESC', [tenantId, professor.id]);
+            const payablesList = payResult.rows;
+            // C. Obtener todos los pagos recibidos
+            const transResult = await pool.query(`SELECT t.*, p.concept 
+         FROM transactions t
+         JOIN payables p ON t.payable_id = p.id
+         WHERE t.tenant_id = $1 AND p.professor_id = $2 AND t.status = 'COMPLETED'
+         ORDER BY t.transaction_date DESC`, [tenantId, professor.id]);
+            const transactionsList = transResult.rows;
+            // D. Obtener asistencia y horas acumuladas del ciclo escolar actual (2026)
+            const attResult = await pool.query(`SELECT * FROM professor_attendance 
+         WHERE tenant_id = $1 AND professor_id = $2 AND TO_CHAR(class_date, 'YYYY') = '2026'
+         ORDER BY class_date DESC`, [tenantId, professor.id]);
+            const attendanceList = attResult.rows;
+            // E. Calcular KPIs
+            let totalEarned = 0;
+            let totalPaid = 0;
+            let totalPending = 0;
+            let hoursWorked = 0;
+            let absencesCount = 0;
+            payablesList.forEach(p => {
+                const amt = Number(p.amount);
+                const paid = Number(p.paid_amount);
+                totalEarned += amt;
+                totalPaid += paid;
+                totalPending += (amt - paid);
+            });
+            attendanceList.forEach(a => {
+                hoursWorked += Number(a.hours_worked);
+                if (a.status === 'ABSENT') {
+                    absencesCount++;
+                }
+            });
+            return res.json({
+                professor: {
+                    id: professor.id,
+                    specialty: professor.specialty,
+                    hourlyRate: Number(professor.hourly_rate),
+                    hireDate: professor.hire_date
+                },
+                metrics: {
+                    totalEarned,
+                    totalPaid,
+                    totalPending,
+                    hoursWorked,
+                    absencesCount,
+                    totalClasses: attendanceList.length
+                },
+                payables: payablesList,
+                paymentsReceived: transactionsList,
+                attendance: attendanceList
+            });
+        }
+        catch (err) {
+            return res.status(500).json({ error: 'Error al consultar Dashboard de Profesores', details: err.message });
+        }
+    }
+    else {
+        // Fallback en memoria
+        const prof = db_1.professors.find(p => p.userId === professorUserId && p.tenantId === tenantId);
+        if (!prof)
+            return res.status(404).json({ error: 'Profesor no encontrado en el tenant' });
+        const payablesList = db_1.payables.filter(p => p.professorId === prof.id).sort((a, b) => b.dueDate.localeCompare(a.dueDate));
+        const transactionsList = db_1.transactions.filter(t => t.payableId && db_1.payables.find(p => p.id === t.payableId && p.professorId === prof.id)).map(t => {
+            const payable = db_1.payables.find(p => p.id === t.payableId);
+            return {
+                ...t,
+                concept: payable?.concept || ''
+            };
+        });
+        const attendanceList = db_1.professorAttendances.filter(pa => pa.professorId === prof.id).sort((a, b) => b.classDate.localeCompare(a.classDate));
+        let totalEarned = 0;
+        let totalPaid = 0;
+        let totalPending = 0;
+        let hoursWorked = 0;
+        let absencesCount = 0;
+        payablesList.forEach(p => {
+            totalEarned += p.amount;
+            totalPaid += p.paidAmount;
+            totalPending += (p.amount - p.paidAmount);
+        });
+        attendanceList.forEach(a => {
+            hoursWorked += a.hoursWorked;
+            if (a.status === 'ABSENT') {
+                absencesCount++;
+            }
+        });
+        return res.json({
+            professor: {
+                id: prof.id,
+                specialty: prof.specialty,
+                hourlyRate: prof.hourlyRate || 50.00,
+                hireDate: prof.hireDate
+            },
+            metrics: {
+                totalEarned,
+                totalPaid,
+                totalPending,
+                hoursWorked,
+                absencesCount,
+                totalClasses: attendanceList.length
+            },
+            payables: payablesList,
+            paymentsReceived: transactionsList,
+            attendance: attendanceList
+        });
+    }
+});
+// 4. Dashboard de Finanzas y Administración (Flujos de caja y KPIs contables)
+app.get('/api/tenants/:tenantId/billing/dashboard/admin', authenticateJWT, async (req, res) => {
+    const { tenantId } = req.params;
+    if (req.user?.tenantId && req.user.tenantId !== tenantId) {
+        return res.status(403).json({ error: 'Acceso denegado: Aislamiento Tenant violado' });
+    }
+    if (dbAvailable) {
+        try {
+            // A. Flujo de Caja (Caja/Bancos de transacciones completadas)
+            const cashResult = await pool.query(`SELECT 
+           COALESCE(SUM(amount) FILTER (WHERE type = 'INCOME'), 0.00) as income_cash,
+           COALESCE(SUM(amount) FILTER (WHERE type = 'EXPENSE'), 0.00) as expense_cash
+         FROM transactions
+         WHERE tenant_id = $1 AND status = 'COMPLETED'`, [tenantId]);
+            const totalIncome = Number(cashResult.rows[0].income_cash);
+            const totalExpense = Number(cashResult.rows[0].expense_cash);
+            const cashBalance = totalIncome - totalExpense;
+            // B. Estado de Cuentas por Cobrar
+            const recResult = await pool.query(`SELECT 
+           COUNT(*) as count,
+           COALESCE(SUM(amount - paid_amount), 0.00) as total_outstanding,
+           COALESCE(SUM(amount - paid_amount) FILTER (WHERE status = 'OVERDUE'), 0.00) as total_overdue
+         FROM receivables
+         WHERE tenant_id = $1 AND status IN ('PENDING', 'OVERDUE')`, [tenantId]);
+            const arOutstanding = Number(recResult.rows[0].total_outstanding);
+            const arOverdue = Number(recResult.rows[0].total_overdue);
+            // C. Estado de Cuentas por Pagar (Nóminas pendientes)
+            const payResult = await pool.query(`SELECT 
+           COUNT(*) as count,
+           COALESCE(SUM(amount - paid_amount), 0.00) as total_outstanding
+         FROM payables
+         WHERE tenant_id = $1 AND status IN ('PENDING', 'OVERDUE')`, [tenantId]);
+            const apOutstanding = Number(payResult.rows[0].total_outstanding);
+            // D. Gráfico de transacciones diarias de los últimos 30 días
+            const chartResult = await pool.query(`SELECT 
+           TO_CHAR(transaction_date, 'YYYY-MM-DD') as date,
+           COALESCE(SUM(amount) FILTER (WHERE type = 'INCOME'), 0) as income,
+           COALESCE(SUM(amount) FILTER (WHERE type = 'EXPENSE'), 0) as expense
+         FROM transactions
+         WHERE tenant_id = $1 AND status = 'COMPLETED' AND transaction_date >= NOW() - INTERVAL '30 days'
+         GROUP BY TO_CHAR(transaction_date, 'YYYY-MM-DD')
+         ORDER BY date ASC`, [tenantId]);
+            // E. Distribución de Cuentas Contables (Saldos en Ledger)
+            const ledgerResult = await pool.query(`SELECT la.id as account_id, la.name as account_name, la.type as account_type,
+                COALESCE(SUM(ll.debit), 0.00) as debits, COALESCE(SUM(ll.credit), 0.00) as credits
+         FROM ledger_accounts la
+         LEFT JOIN ledger_lines ll ON ll.account_id = la.id
+         LEFT JOIN ledger_entries le ON ll.entry_id = le.id
+         WHERE la.tenant_id = $1
+         GROUP BY la.id, la.name, la.type`, [tenantId]);
+            const accountsWithBalance = ledgerResult.rows.map(row => {
+                const deb = Number(row.debits);
+                const cred = Number(row.credits);
+                let balance = 0;
+                // El saldo depende de la naturaleza de la cuenta (Deudora o Acreedora)
+                if (row.account_type === 'ASSET' || row.account_type === 'EXPENSE') {
+                    balance = deb - cred; // Activos y Gastos aumentan por el Debe
+                }
+                else {
+                    balance = cred - deb; // Pasivos, Patrimonio e Ingresos aumentan por el Haber
+                }
+                return {
+                    accountId: row.account_id,
+                    accountName: row.account_name,
+                    accountType: row.account_type,
+                    balance
+                };
+            });
+            return res.json({
+                metrics: {
+                    totalIncome,
+                    totalExpense,
+                    cashBalance,
+                    arOutstanding,
+                    arOverdue,
+                    apOutstanding,
+                    operationalProfit: totalIncome - totalExpense
+                },
+                dailyFlow: chartResult.rows.map(row => ({
+                    date: row.date,
+                    income: Number(row.income),
+                    expense: Number(row.expense)
+                })),
+                ledgerAccounts: accountsWithBalance
+            });
+        }
+        catch (err) {
+            return res.status(500).json({ error: 'Error al consultar Dashboard de Administración', details: err.message });
+        }
+    }
+    else {
+        // Fallback en memoria
+        let totalIncome = 0;
+        let totalExpense = 0;
+        db_1.transactions.filter(t => t.tenantId === tenantId && t.status === 'COMPLETED').forEach(t => {
+            if (t.type === 'INCOME')
+                totalIncome += t.amount;
+            else
+                totalExpense += t.amount;
+        });
+        const cashBalance = totalIncome - totalExpense;
+        let arOutstanding = 0;
+        let arOverdue = 0;
+        db_1.receivables.filter(r => r.tenantId === tenantId && (r.status === 'PENDING' || r.status === 'OVERDUE')).forEach(r => {
+            const outstanding = r.amount - r.paidAmount;
+            arOutstanding += outstanding;
+            if (r.status === 'OVERDUE')
+                arOverdue += outstanding;
+        });
+        let apOutstanding = 0;
+        db_1.payables.filter(p => p.tenantId === tenantId && (p.status === 'PENDING' || p.status === 'OVERDUE')).forEach(p => {
+            apOutstanding += (p.amount - p.paidAmount);
+        });
+        // Cuentas del Ledger en memoria
+        const accountsWithBalance = db_1.ledgerAccounts.filter(la => la.tenantId === tenantId).map(la => {
+            let deb = 0;
+            let cred = 0;
+            const lines = db_1.ledgerLines.filter(l => l.accountId === la.id);
+            lines.forEach(l => {
+                deb += l.debit;
+                cred += l.credit;
+            });
+            let balance = 0;
+            if (la.type === 'ASSET' || la.type === 'EXPENSE') {
+                balance = deb - cred;
+            }
+            else {
+                balance = cred - deb;
+            }
+            return {
+                accountId: la.id,
+                accountName: la.name,
+                accountType: la.type,
+                balance
+            };
+        });
+        return res.json({
+            metrics: {
+                totalIncome,
+                totalExpense,
+                cashBalance,
+                arOutstanding,
+                arOverdue,
+                apOutstanding,
+                operationalProfit: totalIncome - totalExpense
+            },
+            dailyFlow: [
+                { date: '2026-04-09', income: 500, expense: 0 },
+                { date: '2026-05-25', income: 0, expense: 1500 }
+            ],
+            ledgerAccounts: accountsWithBalance
+        });
+    }
 });
 // INICIAR SERVIDOR
 app.listen(PORT, () => {

@@ -19,6 +19,7 @@ export interface Tenant {
   endDate?: string | null;
   paymentGateway?: 'stripe' | 'culqui' | 'conekta';
   billingPlan?: 'membership';
+  deductAbsencesFromPayroll?: boolean;
 }
 
 export interface MenuOption {
@@ -165,7 +166,8 @@ export const tenants: Tenant[] = [
     startDate: '2026-01-15',
     endDate: null,
     paymentGateway: 'culqui',
-    billingPlan: 'membership'
+    billingPlan: 'membership',
+    deductAbsencesFromPayroll: true
   },
   {
     id: 't-22222222-2222-2222-2222-222222222222',
@@ -382,6 +384,7 @@ export interface Professor {
   userId: string; // Vínculo al usuario
   specialty: string;
   hireDate: string; // Formato yyyy-mm-dd
+  hourlyRate?: number; // Tarifa por hora
   status: 'active' | 'license' | 'inactive';
   createdAt: string;
   updatedAt: string;
@@ -485,6 +488,7 @@ export const professors: Professor[] = [
     userId: 'u-t1professor', // Mateo Silva
     specialty: 'Matemáticas y Ciencias Aplicadas',
     hireDate: '2024-03-01',
+    hourlyRate: 50.00,
     status: 'active',
     createdAt: '2024-03-01T08:00:00Z',
     updatedAt: '2026-04-12T10:00:00Z'
@@ -1461,6 +1465,256 @@ export const gradeAuditLogs: GradeAuditLog[] = [
     createdAt: '2026-05-18T10:00:00Z'
   }
 ];
+
+// =====================================================================
+// MODELOS Y SEMILLAS DE PAGOS, COBROS Y LIBRO MAYOR (FASE FINANCIERA)
+// =====================================================================
+
+export interface CreditPricing {
+  id: string;
+  tenantId: string;
+  academicPeriod: string;
+  pricePerCredit: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StudentGuardian {
+  id: string;
+  studentId: string;
+  userId: string;
+  relationship: string;
+  isBillingContact: boolean;
+  createdAt: string;
+}
+
+export interface Receivable {
+  id: string;
+  tenantId: string;
+  studentId: string;
+  enrollmentId: string | null;
+  concept: string;
+  amount: number;
+  paidAmount: number;
+  dueDate: string;
+  status: 'PENDING' | 'PAID' | 'OVERDUE';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Payable {
+  id: string;
+  tenantId: string;
+  professorId: string | null;
+  concept: string;
+  amount: number;
+  paidAmount: number;
+  dueDate: string;
+  status: 'PENDING' | 'PAID' | 'OVERDUE';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Transaction {
+  id: string;
+  tenantId: string;
+  receivableId: string | null;
+  payableId: string | null;
+  type: 'INCOME' | 'EXPENSE';
+  amount: number;
+  paymentMethod: string;
+  gatewayReference: string | null;
+  status: 'PENDING' | 'COMPLETED' | 'FAILED' | 'REFUNDED';
+  transactionDate: string;
+  createdBy: string;
+  metadata?: any;
+  createdAt: string;
+}
+
+export interface LedgerAccount {
+  id: string;
+  tenantId: string;
+  name: string;
+  type: 'ASSET' | 'LIABILITY' | 'EQUITY' | 'REVENUE' | 'EXPENSE';
+  createdAt: string;
+}
+
+export interface LedgerEntry {
+  id: string;
+  tenantId: string;
+  transactionId: string | null;
+  entryDate: string;
+  description: string;
+  createdAt: string;
+}
+
+export interface LedgerLine {
+  id: string;
+  entryId: string;
+  accountId: string;
+  debit: number;
+  credit: number;
+  createdAt: string;
+}
+
+// -------------------------------------------------------------
+// SEMILLAS EN MEMORIA DE LA FASE FINANCIERA (FALLBACK / MOCK)
+// -------------------------------------------------------------
+
+export const creditPricings: CreditPricing[] = [
+  {
+    id: 'pr-t1',
+    tenantId: 't-11111111-1111-1111-1111-111111111111',
+    academicPeriod: '2026-I',
+    pricePerCredit: 100.00,
+    createdAt: '2026-03-01T08:00:00Z',
+    updatedAt: '2026-03-01T08:00:00Z'
+  }
+];
+
+export const studentGuardians: StudentGuardian[] = [
+  {
+    id: 'sg-1',
+    studentId: 'st-1', // Alejandro Mendoza
+    userId: 'u-parent1',
+    relationship: 'Padre',
+    isBillingContact: true,
+    createdAt: '2026-03-01T08:00:00Z'
+  }
+];
+
+export const receivables: Receivable[] = [
+  {
+    id: '77a7fa71-5582-45a8-b6cb-918991ef2361',
+    tenantId: 't-11111111-1111-1111-1111-111111111111',
+    studentId: 'st-1',
+    enrollmentId: 'en-1',
+    concept: 'Matrícula Álgebra y Trigonometría Avanzada (5 créditos)',
+    amount: 500.00,
+    paidAmount: 500.00,
+    dueDate: '2026-04-10',
+    status: 'PAID',
+    createdAt: '2026-04-01T08:00:00Z',
+    updatedAt: '2026-04-09T14:30:00Z'
+  },
+  {
+    id: '77a7fa71-5582-45a8-b6cb-918991ef2362',
+    tenantId: 't-11111111-1111-1111-1111-111111111111',
+    studentId: 'st-1',
+    enrollmentId: 'en-2',
+    concept: 'Matrícula Literatura Hispanoamericana (4 créditos)',
+    amount: 400.00,
+    paidAmount: 0.00,
+    dueDate: '2026-05-10',
+    status: 'PENDING',
+    createdAt: '2026-05-01T08:00:00Z',
+    updatedAt: '2026-05-01T08:00:00Z'
+  },
+  {
+    id: '77a7fa71-5582-45a8-b6cb-918991ef2363',
+    tenantId: 't-11111111-1111-1111-1111-111111111111',
+    studentId: 'st-2',
+    enrollmentId: 'en-3',
+    concept: 'Matrícula Álgebra y Trigonometría Avanzada (5 créditos)',
+    amount: 500.00,
+    paidAmount: 0.00,
+    dueDate: '2026-05-01',
+    status: 'OVERDUE',
+    createdAt: '2026-05-01T08:05:00Z',
+    updatedAt: '2026-05-01T08:05:00Z'
+  }
+];
+
+export const payables: Payable[] = [
+  {
+    id: '99a7fa71-5582-45a8-b6cb-918991ef2361',
+    tenantId: 't-11111111-1111-1111-1111-111111111111',
+    professorId: 'p-1',
+    concept: 'Pago de nómina Mayo 2026 - Mateo Silva (30 horas dictadas)',
+    amount: 1500.00,
+    paidAmount: 0.00,
+    dueDate: '2026-05-30',
+    status: 'PENDING',
+    createdAt: '2026-05-25T08:00:00Z',
+    updatedAt: '2026-05-25T08:00:00Z'
+  }
+];
+
+export const transactions: Transaction[] = [
+  {
+    id: 'cc17fa71-5582-45a8-b6cb-918991ef2361',
+    tenantId: 't-11111111-1111-1111-1111-111111111111',
+    receivableId: '77a7fa71-5582-45a8-b6cb-918991ef2361',
+    payableId: null,
+    type: 'INCOME',
+    amount: 500.00,
+    paymentMethod: 'STRIPE',
+    gatewayReference: 'ch_StripeRef12345',
+    status: 'COMPLETED',
+    transactionDate: '2026-04-09T14:30:00Z',
+    createdBy: 'u-t1admin',
+    createdAt: '2026-04-09T14:30:00Z'
+  }
+];
+
+export const ledgerAccounts: LedgerAccount[] = [
+  { id: '10100', tenantId: 't-11111111-1111-1111-1111-111111111111', name: 'Efectivo y Equivalentes de Efectivo (Caja/Bancos)', type: 'ASSET', createdAt: '2026-03-01T08:00:00Z' },
+  { id: '12100', tenantId: 't-11111111-1111-1111-1111-111111111111', name: 'Cuentas por Cobrar Comerciales (Pensiones/Créditos)', type: 'ASSET', createdAt: '2026-03-01T08:00:00Z' },
+  { id: '21100', tenantId: 't-11111111-1111-1111-1111-111111111111', name: 'Cuentas por Pagar Comerciales (Nómina Docente)', type: 'LIABILITY', createdAt: '2026-03-01T08:00:00Z' },
+  { id: '40100', tenantId: 't-11111111-1111-1111-1111-111111111111', name: 'Ingresos por Servicios Educativos (Mensualidades)', type: 'REVENUE', createdAt: '2026-03-01T08:00:00Z' },
+  { id: '50100', tenantId: 't-11111111-1111-1111-1111-111111111111', name: 'Gastos de Personal - Nómina de Profesores', type: 'EXPENSE', createdAt: '2026-03-01T08:00:00Z' }
+];
+
+export const ledgerEntries: LedgerEntry[] = [
+  { id: 'e1a7fa71-5582-45a8-b6cb-918991ef2361', tenantId: 't-11111111-1111-1111-1111-111111111111', transactionId: null, entryDate: '2026-04-01T08:00:00Z', description: 'Provisión de pensión - Alejandro Mendoza - MAT-101', createdAt: '2026-04-01T08:00:00Z' },
+  { id: 'e1a7fa71-5582-45a8-b6cb-918991ef2362', tenantId: 't-11111111-1111-1111-1111-111111111111', transactionId: null, entryDate: '2026-05-01T08:00:00Z', description: 'Provisión de pensión - Alejandro Mendoza - LIT-204', createdAt: '2026-05-01T08:00:00Z' },
+  { id: 'e1a7fa71-5582-45a8-b6cb-918991ef2363', tenantId: 't-11111111-1111-1111-1111-111111111111', transactionId: null, entryDate: '2026-05-01T08:05:00Z', description: 'Provisión de pensión - Valeria Campos - MAT-101', createdAt: '2026-05-01T08:05:00Z' },
+  { id: 'e2a7fa71-5582-45a8-b6cb-918991ef2361', tenantId: 't-11111111-1111-1111-1111-111111111111', transactionId: 'cc17fa71-5582-45a8-b6cb-918991ef2361', entryDate: '2026-04-09T14:30:00Z', description: 'Cobro de pensión en línea - Recibo 77a7fa71', createdAt: '2026-04-09T14:30:00Z' },
+  { id: 'e3a7fa71-5582-45a8-b6cb-918991ef2361', tenantId: 't-11111111-1111-1111-1111-111111111111', transactionId: null, entryDate: '2026-05-25T08:00:00Z', description: 'Provisión nómina docente - Mateo Silva - Mayo 2026', createdAt: '2026-05-25T08:00:00Z' }
+];
+
+export const ledgerLines: LedgerLine[] = [
+  { id: 'l1', entryId: 'e1a7fa71-5582-45a8-b6cb-918991ef2361', accountId: '12100', debit: 500.00, credit: 0.00, createdAt: '2026-04-01T08:00:00Z' },
+  { id: 'l2', entryId: 'e1a7fa71-5582-45a8-b6cb-918991ef2361', accountId: '40100', debit: 0.00, credit: 500.00, createdAt: '2026-04-01T08:00:00Z' },
+  
+  { id: 'l3', entryId: 'e1a7fa71-5582-45a8-b6cb-918991ef2362', accountId: '12100', debit: 400.00, credit: 0.00, createdAt: '2026-05-01T08:00:00Z' },
+  { id: 'l4', entryId: 'e1a7fa71-5582-45a8-b6cb-918991ef2362', accountId: '40100', debit: 0.00, credit: 400.00, createdAt: '2026-05-01T08:00:00Z' },
+  
+  { id: 'l5', entryId: 'e1a7fa71-5582-45a8-b6cb-918991ef2363', accountId: '12100', debit: 500.00, credit: 0.00, createdAt: '2026-05-01T08:05:00Z' },
+  { id: 'l6', entryId: 'e1a7fa71-5582-45a8-b6cb-918991ef2363', accountId: '40100', debit: 0.00, credit: 500.00, createdAt: '2026-05-01T08:05:00Z' },
+  
+  { id: 'l7', entryId: 'e2a7fa71-5582-45a8-b6cb-918991ef2361', accountId: '10100', debit: 500.00, credit: 0.00, createdAt: '2026-04-09T14:30:00Z' },
+  { id: 'l8', entryId: 'e2a7fa71-5582-45a8-b6cb-918991ef2361', accountId: '12100', debit: 0.00, credit: 500.00, createdAt: '2026-04-09T14:30:00Z' },
+  
+  { id: 'l9', entryId: 'e3a7fa71-5582-45a8-b6cb-918991ef2361', accountId: '50100', debit: 1500.00, credit: 0.00, createdAt: '2026-05-25T08:00:00Z' },
+  { id: 'l10', entryId: 'e3a7fa71-5582-45a8-b6cb-918991ef2361', accountId: '21100', debit: 0.00, credit: 1500.00, createdAt: '2026-05-25T08:00:00Z' }
+];
+
+export interface ProfessorAttendance {
+  id: string;
+  tenantId: string;
+  professorId: string;
+  courseId: string;
+  classDate: string;
+  scheduledHours: number;
+  hoursWorked: number;
+  status: 'PRESENT' | 'ABSENT' | 'LATE' | 'JUSTIFIED';
+  createdAt: string;
+}
+
+export const professorAttendances: ProfessorAttendance[] = [
+  { id: 'att-1', tenantId: 't-11111111-1111-1111-1111-111111111111', professorId: 'p-1', courseId: 'c-1', classDate: '2026-05-02', scheduledHours: 3.0, hoursWorked: 3.0, status: 'PRESENT', createdAt: '2026-05-02T10:00:00Z' },
+  { id: 'att-2', tenantId: 't-11111111-1111-1111-1111-111111111111', professorId: 'p-1', courseId: 'c-1', classDate: '2026-05-05', scheduledHours: 3.0, hoursWorked: 3.0, status: 'PRESENT', createdAt: '2026-05-05T10:00:00Z' },
+  { id: 'att-3', tenantId: 't-11111111-1111-1111-1111-111111111111', professorId: 'p-1', courseId: 'c-1', classDate: '2026-05-09', scheduledHours: 3.0, hoursWorked: 3.0, status: 'PRESENT', createdAt: '2026-05-09T10:00:00Z' },
+  { id: 'att-4', tenantId: 't-11111111-1111-1111-1111-111111111111', professorId: 'p-1', courseId: 'c-1', classDate: '2026-05-12', scheduledHours: 3.0, hoursWorked: 3.0, status: 'PRESENT', createdAt: '2026-05-12T10:00:00Z' },
+  { id: 'att-5', tenantId: 't-11111111-1111-1111-1111-111111111111', professorId: 'p-1', courseId: 'c-1', classDate: '2026-05-16', scheduledHours: 3.0, hoursWorked: 3.0, status: 'PRESENT', createdAt: '2026-05-16T10:00:00Z' },
+  { id: 'att-6', tenantId: 't-11111111-1111-1111-1111-111111111111', professorId: 'p-1', courseId: 'c-1', classDate: '2026-05-19', scheduledHours: 3.0, hoursWorked: 0.0, status: 'ABSENT', createdAt: '2026-05-19T10:00:00Z' },
+  { id: 'att-7', tenantId: 't-11111111-1111-1111-1111-111111111111', professorId: 'p-1', courseId: 'c-1', classDate: '2026-05-23', scheduledHours: 3.0, hoursWorked: 3.0, status: 'PRESENT', createdAt: '2026-05-23T10:00:00Z' },
+  { id: 'att-8', tenantId: 't-11111111-1111-1111-1111-111111111111', professorId: 'p-1', courseId: 'c-1', classDate: '2026-05-26', scheduledHours: 3.0, hoursWorked: 3.0, status: 'PRESENT', createdAt: '2026-05-26T10:00:00Z' },
+  { id: 'att-9', tenantId: 't-11111111-1111-1111-1111-111111111111', professorId: 'p-1', courseId: 'c-1', classDate: '2026-05-30', scheduledHours: 3.0, hoursWorked: 3.0, status: 'PRESENT', createdAt: '2026-05-30T10:00:00Z' },
+  { id: 'att-10', tenantId: 't-11111111-1111-1111-1111-111111111111', professorId: 'p-1', courseId: 'c-1', classDate: '2026-05-31', scheduledHours: 3.0, hoursWorked: 3.0, status: 'PRESENT', createdAt: '2026-05-31T10:00:00Z' }
+];
+
 
 
 
