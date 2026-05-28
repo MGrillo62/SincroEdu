@@ -62,7 +62,7 @@ export default function CoursesPage() {
 
   // Cargar cursos de la API
   const fetchCourses = async () => {
-    const activeTenantId = tenant?.id || 't-11111111-1111-1111-1111-111111111111';
+    const activeTenantId = tenant?.id || '44b7fa71-5582-45a8-b6cb-918991ef2364';
     if (!token) return;
     setLoading(true);
     try {
@@ -102,7 +102,7 @@ export default function CoursesPage() {
   const openHistory = async (course: Course) => {
     setSelectedCourse(course);
     setIsHistoryOpen(true);
-    const activeTenantId = tenant?.id || 't-11111111-1111-1111-1111-111111111111';
+    const activeTenantId = tenant?.id || '44b7fa71-5582-45a8-b6cb-918991ef2364';
     if (!token) return;
     try {
       const res = await fetch(`${getApiUrl()}/tenants/${activeTenantId}/courses/${course.id}/history`, {
@@ -145,7 +145,7 @@ export default function CoursesPage() {
   // Enviar formulario (Crear / Editar)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const activeTenantId = tenant?.id || 't-11111111-1111-1111-1111-111111111111';
+    const activeTenantId = tenant?.id || '44b7fa71-5582-45a8-b6cb-918991ef2364';
     if (!token) return;
 
     const url = editMode 
@@ -182,7 +182,7 @@ export default function CoursesPage() {
 
   // Actualizar Estado Directamente
   const handleStatusChange = async (course: Course, newStatus: 'draft' | 'active' | 'archived') => {
-    const activeTenantId = tenant?.id || 't-11111111-1111-1111-1111-111111111111';
+    const activeTenantId = tenant?.id || '44b7fa71-5582-45a8-b6cb-918991ef2364';
     if (!token) return;
     try {
       const res = await fetch(`${getApiUrl()}/tenants/${activeTenantId}/courses/${course.id}/status`, {

@@ -70,7 +70,7 @@ export default function ProfessorsPage() {
 
   // Cargar Profesores
   const fetchProfessors = async () => {
-    const activeTenantId = tenant?.id || 't-11111111-1111-1111-1111-111111111111';
+    const activeTenantId = tenant?.id || '44b7fa71-5582-45a8-b6cb-918991ef2364';
     if (!token) return;
     setLoading(true);
     try {
@@ -92,7 +92,7 @@ export default function ProfessorsPage() {
 
   // Cargar todos los usuarios para el Autocomplete del Docente
   const fetchUsers = async () => {
-    const activeTenantId = tenant?.id || 't-11111111-1111-1111-1111-111111111111';
+    const activeTenantId = tenant?.id || '44b7fa71-5582-45a8-b6cb-918991ef2364';
     if (!token) return;
     try {
       // Usaremos la sesión del store o simulamos los usuarios disponibles
@@ -135,7 +135,7 @@ export default function ProfessorsPage() {
   const openHistory = async (prof: Professor) => {
     setSelectedProf(prof);
     setIsHistoryOpen(true);
-    const activeTenantId = tenant?.id || 't-11111111-1111-1111-1111-111111111111';
+    const activeTenantId = tenant?.id || '44b7fa71-5582-45a8-b6cb-918991ef2364';
     if (!token) return;
     try {
       const res = await fetch(`${getApiUrl()}/tenants/${activeTenantId}/professors/${prof.id}/history`, {
@@ -175,7 +175,7 @@ export default function ProfessorsPage() {
   // Enviar Formulario
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const activeTenantId = tenant?.id || 't-11111111-1111-1111-1111-111111111111';
+    const activeTenantId = tenant?.id || '44b7fa71-5582-45a8-b6cb-918991ef2364';
     if (!token) return;
 
     const url = editMode 
@@ -212,7 +212,7 @@ export default function ProfessorsPage() {
 
   // Cambiar Estado Directamente
   const handleStatusChange = async (prof: Professor, newStatus: 'active' | 'license' | 'inactive') => {
-    const activeTenantId = tenant?.id || 't-11111111-1111-1111-1111-111111111111';
+    const activeTenantId = tenant?.id || '44b7fa71-5582-45a8-b6cb-918991ef2364';
     if (!token) return;
     try {
       const res = await fetch(`${getApiUrl()}/tenants/${activeTenantId}/professors/${prof.id}/status`, {

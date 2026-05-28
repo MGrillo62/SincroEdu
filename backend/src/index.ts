@@ -1370,7 +1370,7 @@ app.delete('/api/tenants/:tenantId/students/:studentId/enrollments/:enrollmentId
 const getRequestTenantId = (req: AuthenticatedRequest): string | null => {
   if (req.user?.tenantId) return req.user.tenantId;
   if (req.user?.roleId === 'r-superadmin') {
-    return (req.query.tenantId as string) || (req.body.tenantId as string) || 't-11111111-1111-1111-1111-111111111111';
+    return (req.query.tenantId as string) || (req.body.tenantId as string) || '44b7fa71-5582-45a8-b6cb-918991ef2364';
   }
   return null;
 };

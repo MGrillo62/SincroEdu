@@ -123,7 +123,7 @@ export default function StudentsPage() {
 
   // Cargar estudiantes del Backend
   const fetchStudents = async () => {
-    const activeTenantId = tenant?.id || 't-11111111-1111-1111-1111-111111111111';
+    const activeTenantId = tenant?.id || '44b7fa71-5582-45a8-b6cb-918991ef2364';
     if (!token) return;
     setLoading(true);
     try {
@@ -143,7 +143,7 @@ export default function StudentsPage() {
 
   // Cargar catálogo de cursos activos (para la matrícula)
   const fetchCourses = async () => {
-    const activeTenantId = tenant?.id || 't-11111111-1111-1111-1111-111111111111';
+    const activeTenantId = tenant?.id || '44b7fa71-5582-45a8-b6cb-918991ef2364';
     if (!token) return;
     try {
       const res = await fetch(`${getApiUrl()}/tenants/${activeTenantId}/courses`, {
@@ -197,7 +197,7 @@ export default function StudentsPage() {
 
   // Cargar matrículas de un alumno
   const fetchEnrollments = async (student: Student) => {
-    const activeTenantId = tenant?.id || 't-11111111-1111-1111-1111-111111111111';
+    const activeTenantId = tenant?.id || '44b7fa71-5582-45a8-b6cb-918991ef2364';
     if (!token) return;
     setEnrollmentsLoading(true);
     try {
@@ -219,7 +219,7 @@ export default function StudentsPage() {
   const openHistory = async (student: Student) => {
     setSelectedStudent(student);
     setIsHistoryOpen(true);
-    const activeTenantId = tenant?.id || 't-11111111-1111-1111-1111-111111111111';
+    const activeTenantId = tenant?.id || '44b7fa71-5582-45a8-b6cb-918991ef2364';
     if (!token) return;
     try {
       const res = await fetch(`${getApiUrl()}/tenants/${activeTenantId}/students/${student.id}/history`, {
@@ -284,7 +284,7 @@ export default function StudentsPage() {
   // Guardar Alumno (Crear / Editar)
   const handleSubmitStudent = async (e: React.FormEvent) => {
     e.preventDefault();
-    const activeTenantId = tenant?.id || 't-11111111-1111-1111-1111-111111111111';
+    const activeTenantId = tenant?.id || '44b7fa71-5582-45a8-b6cb-918991ef2364';
     if (!token) return;
 
     // Validación sencilla de fecha dd/mm/aaaa
@@ -328,7 +328,7 @@ export default function StudentsPage() {
 
   // Cambiar Estado del estudiante directamente
   const handleStatusChange = async (student: Student, newStatus: 'active' | 'suspended' | 'graduated' | 'inactive') => {
-    const activeTenantId = tenant?.id || 't-11111111-1111-1111-1111-111111111111';
+    const activeTenantId = tenant?.id || '44b7fa71-5582-45a8-b6cb-918991ef2364';
     if (!token) return;
     try {
       const res = await fetch(`${getApiUrl()}/tenants/${activeTenantId}/students/${student.id}/status`, {
@@ -354,7 +354,7 @@ export default function StudentsPage() {
   const handleEnrollSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCourseId || !selectedStudent) return;
-    const activeTenantId = tenant?.id || 't-11111111-1111-1111-1111-111111111111';
+    const activeTenantId = tenant?.id || '44b7fa71-5582-45a8-b6cb-918991ef2364';
     if (!token) return;
 
     setMissingPrereqs([]);
@@ -393,7 +393,7 @@ export default function StudentsPage() {
   // Retirar o dar de baja una matrícula (dropped)
   const handleDropEnrollment = async (enrollmentId: string) => {
     if (!selectedStudent) return;
-    const activeTenantId = tenant?.id || 't-11111111-1111-1111-1111-111111111111';
+    const activeTenantId = tenant?.id || '44b7fa71-5582-45a8-b6cb-918991ef2364';
     if (!token) return;
 
     const confirmDrop = window.confirm('¿Está seguro de retirar este curso del estudiante? La acción registrará la baja en la bitácora de auditoría.');
