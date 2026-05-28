@@ -203,8 +203,9 @@ export const menuOptions: MenuOption[] = [
   { id: 'm-11', parentId: null, title: 'Herramientas Administrativas', icon: 'ShieldAlert', route: '/dashboard/admin', sortOrder: 9, module: 'administracion', isActive: true },
   { id: 'm-config', parentId: null, title: 'Configuración', icon: 'Settings', route: '/dashboard/config', sortOrder: 10, module: 'config', isActive: true },
   { id: 'm-config-roles', parentId: 'm-config', title: 'Roles', icon: 'Shield', route: '/dashboard/config/roles', sortOrder: 1, module: 'config', isActive: true },
-  { id: 'm-2', parentId: 'm-config', title: 'Catálogo de cursos', icon: 'BookOpen', route: '/dashboard/courses', sortOrder: 2, module: 'cursos', isActive: true },
-  { id: 'm-3', parentId: 'm-config', title: 'Profesores', icon: 'Users', route: '/dashboard/professors', sortOrder: 3, module: 'facultad', isActive: true },
+  { id: 'm-config-users', parentId: 'm-config', title: 'Usuarios', icon: 'Users', route: '/dashboard/config/users', sortOrder: 2, module: 'config', isActive: true },
+  { id: 'm-2', parentId: 'm-config', title: 'Catálogo de cursos', icon: 'BookOpen', route: '/dashboard/courses', sortOrder: 3, module: 'cursos', isActive: true },
+  { id: 'm-3', parentId: 'm-config', title: 'Profesores', icon: 'Users', route: '/dashboard/professors', sortOrder: 4, module: 'facultad', isActive: true },
   { id: 'm-tenants', parentId: null, title: 'Configuración de Tenants', icon: 'Globe', route: '/dashboard/tenants', sortOrder: 11, module: 'tenants', isActive: true }
 ];
 

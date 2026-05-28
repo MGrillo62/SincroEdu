@@ -489,7 +489,10 @@ app.get('/api/tenants/:tenantId/roles', authenticateJWT, (req: AuthenticatedRequ
   }
 
   // Filtrar roles del tenant específico (o globales si es superadmin)
-  const tenantRoles = roles.filter(r => r.tenantId === tenantId || r.tenantId === null);
+  const tenantRoles = roles.filter(r => 
+    r.tenantId === tenantId || 
+    (r.tenantId === null && req.user?.roleId === 'r-superadmin')
+  );
   return res.json(tenantRoles);
 });
 
@@ -5699,6 +5702,278 @@ app.get('/api/tenants/:tenantId/scheduling/predictive-demand', authenticateJWT, 
 
   } catch (err: any) {
     return res.status(500).json({ error: 'Error al procesar modelo predictivo de secciones', details: err.message });
+  }
+});
+
+// =====================================================================
+// MÓDULO: GESTIÓN DE USUARIOS DE LA INSTITUCIÓN (MULTI-TENANT CRUD)
+// =====================================================================
+
+// 1. Listar todos los usuarios de un Tenant
+app.get('/api/tenants/:tenantId/users', authenticateJWT, async (req: AuthenticatedRequest, res: Response) => {
+  const { tenantId } = req.params;
+
+  // Aislamiento Multi-Tenant estricto
+  if (req.user?.tenantId && req.user.tenantId !== tenantId) {
+    return res.status(403).json({ error: 'Acceso denegado: Aislamiento Tenant violado' });
+  }
+
+  // Sólo Admin y Superadmin pueden gestionar usuarios
+  if (req.user?.roleId !== 'r-superadmin' && req.user?.roleId !== 'r-tenant1-admin') {
+    const isCustomAdmin = roles.find(r => r.id === req.user?.roleId && r.tenantId === tenantId && r.name.toLowerCase() === 'admin');
+    if (!isCustomAdmin) {
+      return res.status(403).json({ error: 'Acceso denegado: Se requieren privilegios de Administrador' });
+    }
+  }
+
+  if (dbAvailable) {
+    try {
+      const query = `
+        SELECT u.id, u.tenant_id, u.role_id, u.email, u.first_name, u.last_name, u.phone, u.avatar_url, u.is_active,
+               r.name as role_name
+        FROM users u
+        LEFT JOIN roles r ON u.role_id = r.id
+        WHERE u.tenant_id = $1 OR (u.tenant_id IS NULL AND $1 IS NULL)
+        ORDER BY u.last_name ASC, u.first_name ASC
+      `;
+      const result = await pool.query(query, [tenantId === 'system' ? null : tenantId]);
+      const mapped = result.rows.map(row => ({
+        id: row.id,
+        tenantId: row.tenant_id,
+        roleId: row.role_id,
+        email: row.email,
+        firstName: row.first_name,
+        lastName: row.last_name,
+        phone: row.phone,
+        avatarUrl: row.avatar_url,
+        isActive: row.is_active,
+        roleName: row.role_name || 'Sin rol asignado'
+      }));
+      return res.json(mapped);
+    } catch (err: any) {
+      return res.status(500).json({ error: 'Error al obtener usuarios de la base de datos', details: err.message });
+    }
+  } else {
+    // Fallback en memoria
+    const mapped = users.filter(u => u.tenantId === tenantId).map(u => {
+      const role = roles.find(r => r.id === u.roleId);
+      return {
+        id: u.id,
+        tenantId: u.tenantId,
+        roleId: u.roleId,
+        email: u.email,
+        firstName: u.firstName,
+        lastName: u.lastName,
+        phone: u.phone,
+        avatarUrl: u.avatarUrl,
+        isActive: u.isActive,
+        roleName: role ? role.name : 'Invitado'
+      };
+    });
+    return res.json(mapped);
+  }
+});
+
+// 2. Crear un nuevo usuario en el Tenant
+app.post('/api/tenants/:tenantId/users', authenticateJWT, async (req: AuthenticatedRequest, res: Response) => {
+  const { tenantId } = req.params;
+  const { email, password, firstName, lastName, phone, roleId, isActive } = req.body;
+
+  // Aislamiento Multi-Tenant estricto
+  if (req.user?.tenantId && req.user.tenantId !== tenantId) {
+    return res.status(403).json({ error: 'Acceso denegado: Aislamiento Tenant violado' });
+  }
+
+  // Permisos de administrador
+  if (req.user?.roleId !== 'r-superadmin' && req.user?.roleId !== 'r-tenant1-admin') {
+    const isCustomAdmin = roles.find(r => r.id === req.user?.roleId && r.tenantId === tenantId && r.name.toLowerCase() === 'admin');
+    if (!isCustomAdmin) {
+      return res.status(403).json({ error: 'Acceso denegado: Se requieren privilegios de Administrador' });
+    }
+  }
+
+  if (!email || !firstName || !lastName || !roleId) {
+    return res.status(400).json({ error: 'Correo, Nombre, Apellido y Rol son campos requeridos' });
+  }
+
+  // Restringir asignación de Superadmin
+  if (roleId === 'r-superadmin' && req.user?.roleId !== 'r-superadmin') {
+    return res.status(403).json({ error: 'Acceso denegado: No está autorizado para asignar el rol de Superadmin' });
+  }
+
+  try {
+    const salt = bcrypt.genSaltSync(10);
+    const passHash = bcrypt.hashSync(password || 'sincro123', salt);
+    const newUserId = `u-${Date.now()}`;
+    const active = isActive !== undefined ? !!isActive : true;
+
+    if (dbAvailable) {
+      // Validar si correo ya existe en base de datos
+      const emailCheck = await pool.query('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
+      if (emailCheck.rows.length > 0) {
+        return res.status(409).json({ error: 'El correo electrónico ya se encuentra registrado' });
+      }
+
+      const insertQuery = `
+        INSERT INTO users (id, tenant_id, role_id, email, password_hash, first_name, last_name, phone, is_active)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        RETURNING id, email, first_name, last_name, phone, is_active
+      `;
+      const result = await pool.query(insertQuery, [
+        newUserId,
+        tenantId === 'system' ? null : tenantId,
+        roleId,
+        email.toLowerCase(),
+        passHash,
+        firstName,
+        lastName,
+        phone || null,
+        active
+      ]);
+      const row = result.rows[0];
+      return res.status(201).json({
+        id: row.id,
+        email: row.email,
+        firstName: row.first_name,
+        lastName: row.last_name,
+        phone: row.phone,
+        isActive: row.is_active,
+        roleId
+      });
+    } else {
+      // Validar en memoria
+      const emailExists = users.some(u => u.email.toLowerCase() === email.toLowerCase());
+      if (emailExists) {
+        return res.status(409).json({ error: 'El correo electrónico ya se encuentra registrado' });
+      }
+
+      const newUser: User = {
+        id: newUserId,
+        tenantId: tenantId === 'system' ? null : tenantId,
+        roleId,
+        email: email.toLowerCase(),
+        passwordHash: passHash,
+        firstName,
+        lastName,
+        phone: phone || null,
+        avatarUrl: null,
+        isActive: active,
+        lastLogin: null
+      };
+      users.push(newUser);
+      return res.status(201).json({
+        id: newUser.id,
+        email: newUser.email,
+        firstName: newUser.firstName,
+        lastName: newUser.lastName,
+        phone: newUser.phone,
+        isActive: newUser.isActive,
+        roleId
+      });
+    }
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Error al registrar el usuario', details: err.message });
+  }
+});
+
+// 3. Modificar/Actualizar ficha de usuario
+app.put('/api/tenants/:tenantId/users/:userId', authenticateJWT, async (req: AuthenticatedRequest, res: Response) => {
+  const { tenantId, userId } = req.params;
+  const { firstName, lastName, phone, roleId, isActive } = req.body;
+
+  // Aislamiento Multi-Tenant
+  if (req.user?.tenantId && req.user.tenantId !== tenantId) {
+    return res.status(403).json({ error: 'Acceso denegado: Aislamiento Tenant violado' });
+  }
+
+  // Permisos de administrador
+  if (req.user?.roleId !== 'r-superadmin' && req.user?.roleId !== 'r-tenant1-admin') {
+    const isCustomAdmin = roles.find(r => r.id === req.user?.roleId && r.tenantId === tenantId && r.name.toLowerCase() === 'admin');
+    if (!isCustomAdmin) {
+      return res.status(403).json({ error: 'Acceso denegado: Se requieren privilegios de Administrador' });
+    }
+  }
+
+  // Restringir asignación de Superadmin
+  if (roleId === 'r-superadmin' && req.user?.roleId !== 'r-superadmin') {
+    return res.status(403).json({ error: 'Acceso denegado: No está autorizado para asignar el rol de Superadmin' });
+  }
+
+  try {
+    if (dbAvailable) {
+      const updateQuery = `
+        UPDATE users
+        SET role_id = $1, first_name = $2, last_name = $3, phone = $4, is_active = $5, updated_at = NOW()
+        WHERE id = $6 AND (tenant_id = $7 OR (tenant_id IS NULL AND $7 IS NULL))
+        RETURNING id
+      `;
+      const result = await pool.query(updateQuery, [
+        roleId,
+        firstName,
+        lastName,
+        phone || null,
+        isActive !== undefined ? !!isActive : true,
+        userId,
+        tenantId === 'system' ? null : tenantId
+      ]);
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Usuario no encontrado en este Tenant' });
+      }
+      return res.json({ success: true, message: 'Usuario actualizado con éxito' });
+    } else {
+      const idx = users.findIndex(u => u.id === userId && u.tenantId === tenantId);
+      if (idx === -1) {
+        return res.status(404).json({ error: 'Usuario no encontrado' });
+      }
+      users[idx].firstName = firstName || users[idx].firstName;
+      users[idx].lastName = lastName || users[idx].lastName;
+      users[idx].phone = phone !== undefined ? phone : users[idx].phone;
+      users[idx].roleId = roleId || users[idx].roleId;
+      users[idx].isActive = isActive !== undefined ? !!isActive : users[idx].isActive;
+
+      return res.json({ success: true, message: 'Usuario actualizado en memoria' });
+    }
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Error al actualizar el usuario', details: err.message });
+  }
+});
+
+// 4. Eliminar un usuario
+app.delete('/api/tenants/:tenantId/users/:userId', authenticateJWT, async (req: AuthenticatedRequest, res: Response) => {
+  const { tenantId, userId } = req.params;
+
+  // Aislamiento Multi-Tenant
+  if (req.user?.tenantId && req.user.tenantId !== tenantId) {
+    return res.status(403).json({ error: 'Acceso denegado: Aislamiento Tenant violado' });
+  }
+
+  // Permisos de administrador
+  if (req.user?.roleId !== 'r-superadmin' && req.user?.roleId !== 'r-tenant1-admin') {
+    return res.status(403).json({ error: 'Acceso denegado: Se requieren privilegios de Administrador' });
+  }
+
+  // Evitar eliminarse a sí mismo
+  if (userId === req.user?.id) {
+    return res.status(400).json({ error: 'No está permitido eliminarse a sí mismo de la consola escolar' });
+  }
+
+  try {
+    if (dbAvailable) {
+      const result = await pool.query('DELETE FROM users WHERE id = $1 AND tenant_id = $2 RETURNING id', [userId, tenantId]);
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Usuario no encontrado' });
+      }
+      return res.json({ success: true, message: 'Usuario eliminado de la base de datos' });
+    } else {
+      const idx = users.findIndex(u => u.id === userId && u.tenantId === tenantId);
+      if (idx === -1) {
+        return res.status(404).json({ error: 'Usuario no encontrado' });
+      }
+      users.splice(idx, 1);
+      return res.json({ success: true, message: 'Usuario eliminado de memoria' });
+    }
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Error al eliminar usuario', details: err.message });
   }
 });
 

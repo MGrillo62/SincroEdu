@@ -430,15 +430,19 @@ async function initDatabase() {
     await client.query(`
       INSERT INTO menu_options (id, parent_id, title, icon, route, sort_order, module, is_active) VALUES
       ('m-1', NULL, 'KPIs', 'LayoutDashboard', '/dashboard', 1, 'dashboard', TRUE),
-      ('m-2', NULL, 'Catálogo de cursos', 'BookOpen', '/dashboard/courses', 2, 'cursos', TRUE),
-      ('m-3', NULL, 'Profesores', 'Users', '/dashboard/professors', 3, 'facultad', TRUE),
       ('m-5', NULL, 'Alumnos', 'FileText', '/dashboard/students', 5, 'matriculas', TRUE),
       ('m-6', NULL, 'Calificaciones', 'Award', '/dashboard/grades', 6, 'calificaciones', TRUE),
       ('m-7', NULL, 'Pagos y cobros', 'CreditCard', '/dashboard/payments', 7, 'pagos', TRUE),
       ('m-8', NULL, 'Programación predictiva', 'CalendarDays', '/dashboard/predictive', 8, 'predicciones', TRUE),
       ('m-9', NULL, 'Centro de Comunicación', 'MessageSquare', '/dashboard/comms', 9, 'comunicaciones', TRUE),
       ('m-10', NULL, 'CRM y Leads', 'Target', '/dashboard/crm', 10, 'crm', TRUE),
-      ('m-11', NULL, 'Herramientas Administrativas', 'ShieldAlert', '/dashboard/admin', 11, 'administracion', TRUE);
+      ('m-11', NULL, 'Herramientas Administrativas', 'ShieldAlert', '/dashboard/admin', 11, 'administracion', TRUE),
+      ('m-config', NULL, 'Configuración', 'Settings', '/dashboard/config', 12, 'config', TRUE),
+      ('m-config-roles', 'm-config', 'Roles', 'Shield', '/dashboard/config/roles', 1, 'config', TRUE),
+      ('m-config-users', 'm-config', 'Usuarios', 'Users', '/dashboard/config/users', 2, 'config', TRUE),
+      ('m-2', 'm-config', 'Catálogo de cursos', 'BookOpen', '/dashboard/courses', 3, 'cursos', TRUE),
+      ('m-3', 'm-config', 'Profesores', 'Users', '/dashboard/professors', 4, 'facultad', TRUE),
+      ('m-tenants', NULL, 'Configuración de Tenants', 'Globe', '/dashboard/tenants', 13, 'tenants', TRUE);
     `);
     console.log(' - Módulos del menú insertados.');
 
@@ -454,7 +458,7 @@ async function initDatabase() {
     console.log(' - Roles base y dinámicos insertados.');
 
     // D. Insertar Permisos de Menú
-    const menuIds = ['m-1', 'm-2', 'm-3', 'm-5', 'm-6', 'm-7', 'm-8', 'm-9', 'm-10', 'm-11'];
+    const menuIds = ['m-1', 'm-2', 'm-3', 'm-5', 'm-6', 'm-7', 'm-8', 'm-9', 'm-10', 'm-11', 'm-config', 'm-config-roles', 'm-config-users', 'm-tenants'];
     
     // Superadmin permisos
     for (const mId of menuIds) {
@@ -466,14 +470,15 @@ async function initDatabase() {
 
     // Admin Tenant 1 permisos
     for (const mId of menuIds) {
+      const isTenantsMenu = mId === 'm-tenants';
       await client.query(`
         INSERT INTO role_menu_permissions (role_id, menu_option_id, can_view, can_create, can_edit, can_delete)
-        VALUES ('r-tenant1-admin', '${mId}', TRUE, TRUE, TRUE, TRUE);
+        VALUES ('r-tenant1-admin', '${mId}', ${!isTenantsMenu}, ${!isTenantsMenu}, ${!isTenantsMenu}, ${!isTenantsMenu});
       `);
     }
 
     // Profesor Tenant 1 permisos
-    const profMenus = ['m-1', 'm-2', 'm-3', 'm-5', 'm-6', 'm-9'];
+    const profMenus = ['m-1', 'm-2', 'm-3', 'm-5', 'm-6', 'm-9', 'm-config'];
     for (const mId of menuIds) {
       const isAllowed = profMenus.includes(mId);
       await client.query(`
@@ -493,7 +498,7 @@ async function initDatabase() {
     }
 
     // Auxiliar Tenant 1 permisos
-    const auxMenus = ['m-1', 'm-2', 'm-5', 'm-9', 'm-10'];
+    const auxMenus = ['m-1', 'm-2', 'm-5', 'm-9', 'm-10', 'm-config'];
     for (const mId of menuIds) {
       const isAllowed = auxMenus.includes(mId);
       await client.query(`
