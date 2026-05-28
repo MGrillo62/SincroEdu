@@ -19,6 +19,11 @@ async function initDatabase() {
     // 1. LIMPIAR TABLAS EXISTENTES POR SEGURIDAD (Orden inverso de dependencias)
     console.log('\n🧹 Limpiando tablas previas si existen...');
     await client.query(`
+      DROP TABLE IF EXISTS professor_attendance CASCADE;
+      DROP TABLE IF EXISTS schedules CASCADE;
+      DROP TABLE IF EXISTS time_slots CASCADE;
+      DROP TABLE IF EXISTS professor_availabilities CASCADE;
+      DROP TABLE IF EXISTS classrooms CASCADE;
       DROP TABLE IF EXISTS ledger_lines CASCADE;
       DROP TABLE IF EXISTS ledger_entries CASCADE;
       DROP TABLE IF EXISTS ledger_accounts CASCADE;
@@ -343,8 +348,69 @@ async function initDatabase() {
           (credit > 0 AND debit = 0)
         )
       );
+
+      -- 20. AULAS Y ESPACIOS DE ESTUDIO (classrooms)
+      CREATE TABLE classrooms (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        campus_id VARCHAR(50) REFERENCES campuses(id) ON DELETE CASCADE,
+        name VARCHAR(150) NOT NULL,
+        type VARCHAR(50) NOT NULL CHECK (type IN ('classroom', 'laboratory', 'auditorium', 'virtual_room')),
+        capacity INT NOT NULL CHECK (capacity > 0),
+        status VARCHAR(50) DEFAULT 'active' CHECK (status IN ('active', 'maintenance', 'inactive')),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE INDEX idx_classrooms_tenant ON classrooms(tenant_id);
+
+      -- 21. DISPONIBILIDAD DOCENTE (professor_availabilities)
+      CREATE TABLE professor_availabilities (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        professor_id VARCHAR(50) NOT NULL REFERENCES professors(id) ON DELETE CASCADE,
+        day_of_week INT NOT NULL CHECK (day_of_week BETWEEN 1 AND 7), -- 1: Lunes, 7: Domingo
+        start_time TIME NOT NULL,
+        end_time TIME NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE INDEX idx_prof_avail_tenant ON professor_availabilities(tenant_id);
+      CREATE INDEX idx_prof_avail_prof ON professor_availabilities(professor_id);
+
+      -- 22. BLOQUES HORARIOS ESTÁNDAR (time_slots)
+      CREATE TABLE time_slots (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        name VARCHAR(100) NOT NULL,
+        day_of_week INT NOT NULL CHECK (day_of_week BETWEEN 1 AND 7),
+        start_time TIME NOT NULL,
+        end_time TIME NOT NULL,
+        type VARCHAR(50) DEFAULT 'standard' CHECK (type IN ('standard', 'lab', 'recess', 'special')),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE INDEX idx_time_slots_tenant ON time_slots(tenant_id);
+
+      -- 23. ASIGNACIÓN HORARIA (schedules)
+      CREATE TABLE schedules (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        course_id VARCHAR(50) NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+        professor_id VARCHAR(50) REFERENCES professors(id) ON DELETE SET NULL,
+        classroom_id UUID REFERENCES classrooms(id) ON DELETE SET NULL,
+        time_slot_id UUID REFERENCES time_slots(id) ON DELETE CASCADE,
+        academic_period VARCHAR(50) NOT NULL,
+        section_code VARCHAR(50) NOT NULL,
+        status VARCHAR(50) DEFAULT 'draft' CHECK (status IN ('draft', 'published')),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (tenant_id, course_id, academic_period, section_code, time_slot_id)
+      );
+
+      CREATE INDEX idx_schedules_tenant ON schedules(tenant_id);
     `);
-    console.log('✅ Esquema de base de datos académico-financiero creado exitosamente.');
+    console.log('✅ Esquema de base de datos académico-financiero y de optimización creado exitosamente.');
 
     // 3. POBLACIÓN DE SEMILLAS (SEED DATA)
     console.log('\n🌱 Poblando base de datos con registros de prueba...');
@@ -366,7 +432,6 @@ async function initDatabase() {
       ('m-1', NULL, 'KPIs', 'LayoutDashboard', '/dashboard', 1, 'dashboard', TRUE),
       ('m-2', NULL, 'Catálogo de cursos', 'BookOpen', '/dashboard/courses', 2, 'cursos', TRUE),
       ('m-3', NULL, 'Profesores', 'Users', '/dashboard/professors', 3, 'facultad', TRUE),
-      ('m-4', NULL, 'Sedes', 'MapPin', '/dashboard/campuses', 4, 'sedes', TRUE),
       ('m-5', NULL, 'Alumnos', 'FileText', '/dashboard/students', 5, 'matriculas', TRUE),
       ('m-6', NULL, 'Calificaciones', 'Award', '/dashboard/grades', 6, 'calificaciones', TRUE),
       ('m-7', NULL, 'Pagos y cobros', 'CreditCard', '/dashboard/payments', 7, 'pagos', TRUE),
@@ -389,7 +454,7 @@ async function initDatabase() {
     console.log(' - Roles base y dinámicos insertados.');
 
     // D. Insertar Permisos de Menú
-    const menuIds = ['m-1', 'm-2', 'm-3', 'm-4', 'm-5', 'm-6', 'm-7', 'm-8', 'm-9', 'm-10', 'm-11'];
+    const menuIds = ['m-1', 'm-2', 'm-3', 'm-5', 'm-6', 'm-7', 'm-8', 'm-9', 'm-10', 'm-11'];
     
     // Superadmin permisos
     for (const mId of menuIds) {
@@ -428,7 +493,7 @@ async function initDatabase() {
     }
 
     // Auxiliar Tenant 1 permisos
-    const auxMenus = ['m-1', 'm-2', 'm-4', 'm-5', 'm-9', 'm-10'];
+    const auxMenus = ['m-1', 'm-2', 'm-5', 'm-9', 'm-10'];
     for (const mId of menuIds) {
       const isAllowed = auxMenus.includes(mId);
       await client.query(`
@@ -625,6 +690,51 @@ async function initDatabase() {
       ('${entryProvPay1Id}', '21100', 0.00, 1500.00);
     `);
     console.log(' - Nómina de profesores y Libro Mayor contable inicializados.');
+
+    // R. Insertar Aulas y Laboratorios (classrooms)
+    const classroom1Id = '11111111-2222-3333-4444-555555555551';
+    const classroom2Id = '11111111-2222-3333-4444-555555555552';
+    const classroom3Id = '11111111-2222-3333-4444-555555555553';
+    const classroom4Id = '11111111-2222-3333-4444-555555555554';
+    await client.query(`
+      INSERT INTO classrooms (id, tenant_id, campus_id, name, type, capacity, status) VALUES
+      ('${classroom1Id}', '${tenant1Id}', 'cp-1', 'Aula 101 - Pabellón A', 'classroom', 30, 'active'),
+      ('${classroom2Id}', '${tenant1Id}', 'cp-1', 'Aula 102 - Pabellón A', 'classroom', 35, 'active'),
+      ('${classroom3Id}', '${tenant1Id}', 'cp-2', 'Laboratorio Alfa Robótica', 'laboratory', 20, 'active'),
+      ('${classroom4Id}', '${tenant1Id}', 'cp-3', 'Aula Virtual Zoom General A', 'virtual_room', 100, 'active');
+    `);
+    console.log(' - Aulas y laboratorios de estudio insertados.');
+
+    // S. Insertar Bloques Horarios Estándar (time_slots)
+    const slot1Id = '22222222-3333-4444-5555-666666666661'; // Lunes Mañana 1
+    const slot2Id = '22222222-3333-4444-5555-666666666662'; // Lunes Mañana 2
+    const slot3Id = '22222222-3333-4444-5555-666666666663'; // Miércoles Mañana 1
+    const slot4Id = '22222222-3333-4444-5555-666666666664'; // Viernes Mañana 1
+    await client.query(`
+      INSERT INTO time_slots (id, tenant_id, name, day_of_week, start_time, end_time, type) VALUES
+      ('${slot1Id}', '${tenant1Id}', 'Lunes Mañana 1', 1, '08:00:00', '10:00:00', 'standard'),
+      ('${slot2Id}', '${tenant1Id}', 'Lunes Mañana 2', 1, '10:30:00', '12:30:00', 'standard'),
+      ('${slot3Id}', '${tenant1Id}', 'Miércoles Mañana 1', 3, '08:00:00', '10:00:00', 'standard'),
+      ('${slot4Id}', '${tenant1Id}', 'Viernes Mañana 1', 5, '08:00:00', '10:00:00', 'standard');
+    `);
+    console.log(' - Bloques horarios estándar insertados.');
+
+    // T. Insertar Disponibilidades Horarias Docentes (professor_availabilities)
+    await client.query(`
+      INSERT INTO professor_availabilities (tenant_id, professor_id, day_of_week, start_time, end_time) VALUES
+      ('${tenant1Id}', 'p-1', 1, '08:00:00', '13:00:00'),
+      ('${tenant1Id}', 'p-1', 3, '08:00:00', '13:00:00'),
+      ('${tenant1Id}', 'p-1', 5, '08:00:00', '13:00:00');
+    `);
+    console.log(' - Disponibilidades de profesores insertadas.');
+
+    // U. Insertar Programación Borrador / Oficial Inicial (schedules)
+    await client.query(`
+      INSERT INTO schedules (tenant_id, course_id, professor_id, classroom_id, time_slot_id, academic_period, section_code, status) VALUES
+      ('${tenant1Id}', 'c-1', 'p-1', '${classroom1Id}', '${slot1Id}', '2026-I', 'A', 'published'),
+      ('${tenant1Id}', 'c-2', NULL, '${classroom2Id}', '${slot2Id}', '2026-I', 'A', 'draft');
+    `);
+    console.log(' - Asignación horaria inicial (Schedules) insertada.');
 
     console.log('\n=====================================================================');
     console.log('🎉 BASE DE DATOS DE SINCROEDU TOTALMENTE CONFIGURADA Y SEMBRADA EN NEON');

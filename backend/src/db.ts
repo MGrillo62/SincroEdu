@@ -194,7 +194,7 @@ export const tenants: Tenant[] = [
 export const menuOptions: MenuOption[] = [
   { id: 'm-1', parentId: null, title: 'KPIs', icon: 'LayoutDashboard', route: '/dashboard', sortOrder: 1, module: 'dashboard', isActive: true },
   { id: 'm-10', parentId: null, title: 'CRM y Leads', icon: 'Target', route: '/dashboard/crm', sortOrder: 2, module: 'crm', isActive: true },
-  { id: 'm-4', parentId: null, title: 'Sedes', icon: 'MapPin', route: '/dashboard/campuses', sortOrder: 3, module: 'sedes', isActive: true },
+
   { id: 'm-5', parentId: null, title: 'Alumnos', icon: 'FileText', route: '/dashboard/students', sortOrder: 4, module: 'matriculas', isActive: true },
   { id: 'm-6', parentId: null, title: 'Calificaciones', icon: 'Award', route: '/dashboard/grades', sortOrder: 5, module: 'calificaciones', isActive: true },
   { id: 'm-7', parentId: null, title: 'Pagos y cobros', icon: 'CreditCard', route: '/dashboard/payments', sortOrder: 6, module: 'pagos', isActive: true },
@@ -296,7 +296,7 @@ menuOptions.forEach(menu => {
 });
 
 // 4. Auxiliar de Tenant 1 tiene acceso intermedio
-const auxVisibleMenus = ['m-1', 'm-config', 'm-2', 'm-4', 'm-5', 'm-9', 'm-10'];
+const auxVisibleMenus = ['m-1', 'm-config', 'm-2', 'm-5', 'm-9', 'm-10'];
 menuOptions.forEach(menu => {
   const isAllowed = auxVisibleMenus.includes(menu.id);
   roleMenuPermissions.push({
@@ -1748,6 +1748,80 @@ export const professorAttendances: ProfessorAttendance[] = [
   { id: 'att-8', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', professorId: 'p-1', courseId: 'c-1', classDate: '2026-05-26', scheduledHours: 3.0, hoursWorked: 3.0, status: 'PRESENT', createdAt: '2026-05-26T10:00:00Z' },
   { id: 'att-9', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', professorId: 'p-1', courseId: 'c-1', classDate: '2026-05-30', scheduledHours: 3.0, hoursWorked: 3.0, status: 'PRESENT', createdAt: '2026-05-30T10:00:00Z' },
   { id: 'att-10', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', professorId: 'p-1', courseId: 'c-1', classDate: '2026-05-31', scheduledHours: 3.0, hoursWorked: 3.0, status: 'PRESENT', createdAt: '2026-05-31T10:00:00Z' }
+];
+
+// =====================================================================
+// INTERFACES Y MODELOS DE PLANIFICACIÓN PREDICTIVA (FASE 4)
+// =====================================================================
+
+export interface Classroom {
+  id: string;
+  tenantId: string;
+  campusId?: string;
+  name: string;
+  type: 'classroom' | 'laboratory' | 'auditorium' | 'virtual_room';
+  capacity: number;
+  status: 'active' | 'maintenance' | 'inactive';
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ProfessorAvailability {
+  id: string;
+  tenantId: string;
+  professorId: string;
+  dayOfWeek: number; // 1-7 (Lunes-Domingo)
+  startTime: string; // "HH:MM:SS"
+  endTime: string; // "HH:MM:SS"
+}
+
+export interface TimeSlot {
+  id: string;
+  tenantId: string;
+  name: string;
+  dayOfWeek: number; // 1-7
+  startTime: string; // "HH:MM:SS"
+  endTime: string; // "HH:MM:SS"
+  type: 'standard' | 'lab' | 'recess' | 'special';
+}
+
+export interface Schedule {
+  id: string;
+  tenantId: string;
+  courseId: string;
+  professorId?: string;
+  classroomId?: string;
+  timeSlotId: string;
+  academicPeriod: string;
+  sectionCode: string;
+  status: 'draft' | 'published';
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export const mockClassrooms: Classroom[] = [
+  { id: '11111111-2222-3333-4444-555555555551', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', campusId: 'cp-1', name: 'Aula 101 - Pabellón A', type: 'classroom', capacity: 30, status: 'active' },
+  { id: '11111111-2222-3333-4444-555555555552', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', campusId: 'cp-1', name: 'Aula 102 - Pabellón A', type: 'classroom', capacity: 35, status: 'active' },
+  { id: '11111111-2222-3333-4444-555555555553', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', campusId: 'cp-2', name: 'Laboratorio Alfa Robótica', type: 'laboratory', capacity: 20, status: 'active' },
+  { id: '11111111-2222-3333-4444-555555555554', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', campusId: 'cp-3', name: 'Aula Virtual Zoom General A', type: 'virtual_room', capacity: 100, status: 'active' }
+];
+
+export const mockTimeSlots: TimeSlot[] = [
+  { id: '22222222-3333-4444-5555-666666666661', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', name: 'Lunes Mañana 1', dayOfWeek: 1, startTime: '08:00:00', endTime: '10:00:00', type: 'standard' },
+  { id: '22222222-3333-4444-5555-666666666662', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', name: 'Lunes Mañana 2', dayOfWeek: 1, startTime: '10:30:00', endTime: '12:30:00', type: 'standard' },
+  { id: '22222222-3333-4444-5555-666666666663', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', name: 'Miércoles Mañana 1', dayOfWeek: 3, startTime: '08:00:00', endTime: '10:00:00', type: 'standard' },
+  { id: '22222222-3333-4444-5555-666666666664', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', name: 'Viernes Mañana 1', dayOfWeek: 5, startTime: '08:00:00', endTime: '10:00:00', type: 'standard' }
+];
+
+export const mockProfessorAvailabilities: ProfessorAvailability[] = [
+  { id: 'pa-1', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', professorId: 'p-1', dayOfWeek: 1, startTime: '08:00:00', endTime: '13:00:00' },
+  { id: 'pa-2', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', professorId: 'p-1', dayOfWeek: 3, startTime: '08:00:00', endTime: '13:00:00' },
+  { id: 'pa-3', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', professorId: 'p-1', dayOfWeek: 5, startTime: '08:00:00', endTime: '13:00:00' }
+];
+
+export const mockSchedules: Schedule[] = [
+  { id: 'sch-1', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', courseId: 'c-1', professorId: 'p-1', classroomId: '11111111-2222-3333-4444-555555555551', timeSlotId: '22222222-3333-4444-5555-666666666661', academicPeriod: '2026-I', sectionCode: 'A', status: 'published' },
+  { id: 'sch-2', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', courseId: 'c-2', classroomId: '11111111-2222-3333-4444-555555555552', timeSlotId: '22222222-3333-4444-5555-666666666662', academicPeriod: '2026-I', sectionCode: 'A', status: 'draft' }
 ];
 
 

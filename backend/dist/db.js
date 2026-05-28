@@ -3,14 +3,14 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.professorAttendances = exports.ledgerLines = exports.ledgerEntries = exports.ledgerAccounts = exports.transactions = exports.payables = exports.receivables = exports.studentGuardians = exports.creditPricings = exports.gradeAuditLogs = exports.periodLocks = exports.gradeRecords = exports.evaluationStructures = exports.gradeScales = exports.communicationRecipients = exports.communicationMessages = exports.communicationTemplates = exports.leadTasks = exports.leadActivities = exports.leads = exports.enrollments = exports.students = exports.auditLogs = exports.campuses = exports.professors = exports.courses = exports.users = exports.roleMenuPermissions = exports.roles = exports.menuOptions = exports.tenants = void 0;
+exports.mockSchedules = exports.mockProfessorAvailabilities = exports.mockTimeSlots = exports.mockClassrooms = exports.professorAttendances = exports.ledgerLines = exports.ledgerEntries = exports.ledgerAccounts = exports.transactions = exports.payables = exports.receivables = exports.studentGuardians = exports.creditPricings = exports.gradeAuditLogs = exports.periodLocks = exports.gradeRecords = exports.evaluationStructures = exports.gradeScales = exports.communicationRecipients = exports.communicationMessages = exports.communicationTemplates = exports.leadTasks = exports.leadActivities = exports.leads = exports.enrollments = exports.students = exports.auditLogs = exports.campuses = exports.professors = exports.courses = exports.users = exports.roleMenuPermissions = exports.roles = exports.menuOptions = exports.tenants = void 0;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 // -------------------------------------------------------------
 // MOCK DATA INITIALIZATION
 // -------------------------------------------------------------
 exports.tenants = [
     {
-        id: 't-11111111-1111-1111-1111-111111111111',
+        id: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         name: 'SincroEdu Premium College',
         subdomain: 'sincroedu-college',
         logoUrl: '/brand/logo.png',
@@ -31,7 +31,7 @@ exports.tenants = [
         deductAbsencesFromPayroll: true
     },
     {
-        id: 't-22222222-2222-2222-2222-222222222222',
+        id: 'bb820465-b778-43d9-a723-f390035cb3c8',
         name: 'Instituto de Ciencias Innovación',
         subdomain: 'ciencias-innovacion',
         logoUrl: null,
@@ -54,7 +54,6 @@ exports.tenants = [
 exports.menuOptions = [
     { id: 'm-1', parentId: null, title: 'KPIs', icon: 'LayoutDashboard', route: '/dashboard', sortOrder: 1, module: 'dashboard', isActive: true },
     { id: 'm-10', parentId: null, title: 'CRM y Leads', icon: 'Target', route: '/dashboard/crm', sortOrder: 2, module: 'crm', isActive: true },
-    { id: 'm-4', parentId: null, title: 'Sedes', icon: 'MapPin', route: '/dashboard/campuses', sortOrder: 3, module: 'sedes', isActive: true },
     { id: 'm-5', parentId: null, title: 'Alumnos', icon: 'FileText', route: '/dashboard/students', sortOrder: 4, module: 'matriculas', isActive: true },
     { id: 'm-6', parentId: null, title: 'Calificaciones', icon: 'Award', route: '/dashboard/grades', sortOrder: 5, module: 'calificaciones', isActive: true },
     { id: 'm-7', parentId: null, title: 'Pagos y cobros', icon: 'CreditCard', route: '/dashboard/payments', sortOrder: 6, module: 'pagos', isActive: true },
@@ -79,27 +78,33 @@ exports.roles = [
     // Tenant 1: SincroEdu Premium College
     {
         id: 'r-tenant1-admin',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         name: 'Admin',
         description: 'Administrador general del Tenant.',
         isSystemRole: true
     },
     {
         id: 'r-tenant1-professor',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         name: 'Profesor',
-        description: 'Personal docente con acceso a notas y cursos.',
-        isSystemRole: false
+        description: 'Docente con acceso académico.',
+        isSystemRole: true
     },
     {
         id: 'r-tenant1-auxiliar',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         name: 'Auxiliar',
-        description: 'Personal administrativo de apoyo.',
-        isSystemRole: false
+        description: 'Personal de apoyo administrativo.',
+        isSystemRole: true
+    },
+    {
+        id: 'r-tenant1-parent',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
+        name: 'Padre',
+        description: 'Acceso para padres de familia.',
+        isSystemRole: true
     }
 ];
-// Generar matriz de permisos dinámicos
 exports.roleMenuPermissions = [];
 // 1. Superadmin tiene acceso a TODO con permisos completos
 exports.menuOptions.forEach(menu => {
@@ -142,20 +147,33 @@ exports.menuOptions.forEach(menu => {
     });
 });
 // 4. Auxiliar de Tenant 1 tiene acceso intermedio
-const auxVisibleMenus = ['m-1', 'm-config', 'm-2', 'm-4', 'm-5', 'm-9', 'm-10'];
+const auxVisibleMenus = ['m-1', 'm-config', 'm-2', 'm-5', 'm-9', 'm-10'];
 exports.menuOptions.forEach(menu => {
     const isAllowed = auxVisibleMenus.includes(menu.id);
     exports.roleMenuPermissions.push({
-        id: `p-t1ax-${menu.id}`,
+        id: 'p-t1ax-' + menu.id,
         roleId: 'r-tenant1-auxiliar',
         menuOptionId: menu.id,
         canView: isAllowed,
-        canCreate: isAllowed && ['m-5', 'm-9', 'm-10'].includes(menu.id), // Crear matrículas, mensajes, leads
+        canCreate: isAllowed && ['m-5', 'm-9', 'm-10'].includes(menu.id),
         canEdit: isAllowed && ['m-5', 'm-9', 'm-10'].includes(menu.id),
         canDelete: false
     });
 });
-// Hash de contraseñas de prueba (sincro123)
+// 5. Padre de Familia de Tenant 1 tiene acceso al Dashboard y al módulo de Pagos
+const parentVisibleMenus = ['m-1', 'm-7'];
+exports.menuOptions.forEach(menu => {
+    const isAllowed = parentVisibleMenus.includes(menu.id);
+    exports.roleMenuPermissions.push({
+        id: 'p-t1pr-' + menu.id,
+        roleId: 'r-tenant1-parent',
+        menuOptionId: menu.id,
+        canView: isAllowed,
+        canCreate: false,
+        canEdit: false,
+        canDelete: false
+    });
+});
 const salt = bcryptjs_1.default.genSaltSync(10);
 const defaultPasswordHash = bcryptjs_1.default.hashSync('sincro123', salt);
 exports.users = [
@@ -174,7 +192,7 @@ exports.users = [
     },
     {
         id: 'u-t1admin',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         roleId: 'r-tenant1-admin',
         email: 'admin@colegiopremium.edu',
         passwordHash: defaultPasswordHash,
@@ -187,7 +205,7 @@ exports.users = [
     },
     {
         id: 'u-t1professor',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         roleId: 'r-tenant1-professor',
         email: 'profesor@colegiopremium.edu',
         passwordHash: defaultPasswordHash,
@@ -200,7 +218,7 @@ exports.users = [
     },
     {
         id: 'u-t1auxiliar',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         roleId: 'r-tenant1-auxiliar',
         email: 'auxiliar@colegiopremium.edu',
         passwordHash: defaultPasswordHash,
@@ -208,6 +226,19 @@ exports.users = [
         lastName: 'Vegas',
         phone: '+51 911 222 333',
         avatarUrl: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150',
+        isActive: true,
+        lastLogin: null
+    },
+    {
+        id: 'u-parent1',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
+        roleId: 'r-tenant1-parent',
+        email: 'padre@colegiopremium.edu',
+        passwordHash: defaultPasswordHash,
+        firstName: 'Carlos',
+        lastName: 'Mendoza',
+        phone: '+51 987 222 333',
+        avatarUrl: null,
         isActive: true,
         lastLogin: null
     }
@@ -218,7 +249,7 @@ exports.users = [
 exports.courses = [
     {
         id: 'c-1',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         code: 'MAT-101',
         name: 'Álgebra y Trigonometría Avanzada',
         description: 'Curso fundamental de análisis algebraico, funciones complejas y modelos trigonométricos para ciencias aplicadas.',
@@ -230,7 +261,7 @@ exports.courses = [
     },
     {
         id: 'c-2',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         code: 'LIT-204',
         name: 'Literatura Hispanoamericana del Siglo XX',
         description: 'Estudio crítico de las obras cumbre del boom latinoamericano, análisis lírico y evolución literaria continental.',
@@ -242,7 +273,7 @@ exports.courses = [
     },
     {
         id: 'c-3',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         code: 'TEC-302',
         name: 'Programación y Robótica Escolar Integrada',
         description: 'Taller práctico introductorio a microcontroladores, lógica computacional básica utilizando Python y diseño electromecánico.',
@@ -254,7 +285,7 @@ exports.courses = [
     },
     {
         id: 'c-4',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         code: 'MAT-201',
         name: 'Cálculo Avanzado y Análisis Real',
         description: 'Estudio de límites, derivadas complejas, integrales múltiples y análisis de series matemáticas para ingeniería.',
@@ -266,7 +297,7 @@ exports.courses = [
     },
     {
         id: 'c-5',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         code: 'TEC-401',
         name: 'Robótica Aplicada y Sistemas Autónomos',
         description: 'Diseño avanzado de robots móviles, cinemática directa/inversa, sensores inteligentes y sistemas de control autónomo.',
@@ -280,7 +311,7 @@ exports.courses = [
 exports.professors = [
     {
         id: 'p-1',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         userId: 'u-t1professor', // Mateo Silva
         specialty: 'Matemáticas y Ciencias Aplicadas',
         hireDate: '2024-03-01',
@@ -293,7 +324,7 @@ exports.professors = [
 exports.campuses = [
     {
         id: 'cp-1',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         name: 'Sede Central San Isidro',
         address: 'Av. Aurelio Miró Quesada 450, San Isidro',
         type: 'physical',
@@ -304,7 +335,7 @@ exports.campuses = [
     },
     {
         id: 'cp-2',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         name: 'Laboratorio de Innovación y Robótica Sur',
         address: 'Calle Monterrey 340, Surco',
         type: 'physical',
@@ -315,7 +346,7 @@ exports.campuses = [
     },
     {
         id: 'cp-3',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         name: 'Campus Virtual Integrado SincroEdu',
         address: 'https://campus.sincroedu.edu.pe',
         type: 'virtual',
@@ -329,7 +360,7 @@ exports.auditLogs = [
     // Cursos Logs
     {
         id: 'al-1',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         tableName: 'courses',
         recordId: 'c-1',
         action: 'CREATE',
@@ -340,7 +371,7 @@ exports.auditLogs = [
     },
     {
         id: 'al-2',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         tableName: 'courses',
         recordId: 'c-2',
         action: 'CREATE',
@@ -351,7 +382,7 @@ exports.auditLogs = [
     },
     {
         id: 'al-3',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         tableName: 'courses',
         recordId: 'c-2',
         action: 'STATUS_CHANGE',
@@ -363,7 +394,7 @@ exports.auditLogs = [
     // Facultad Logs
     {
         id: 'al-4',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         tableName: 'professors',
         recordId: 'p-1',
         action: 'CREATE',
@@ -374,7 +405,7 @@ exports.auditLogs = [
     },
     {
         id: 'al-5',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         tableName: 'professors',
         recordId: 'p-1',
         action: 'UPDATE',
@@ -386,7 +417,7 @@ exports.auditLogs = [
     // Sedes Logs
     {
         id: 'al-6',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         tableName: 'campuses',
         recordId: 'cp-2',
         action: 'CREATE',
@@ -397,7 +428,7 @@ exports.auditLogs = [
     },
     {
         id: 'al-7',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         tableName: 'campuses',
         recordId: 'cp-2',
         action: 'STATUS_CHANGE',
@@ -410,7 +441,7 @@ exports.auditLogs = [
 exports.students = [
     {
         id: 'st-1',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         enrollmentNumber: 'MAT-2026-0001',
         documentId: 'DNI 72615438',
         firstName: 'Alejandro',
@@ -425,7 +456,7 @@ exports.students = [
     },
     {
         id: 'st-2',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         enrollmentNumber: 'MAT-2026-0002',
         documentId: 'DNI 73928174',
         firstName: 'Valeria',
@@ -440,7 +471,7 @@ exports.students = [
     },
     {
         id: 'st-3',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         enrollmentNumber: 'MAT-2026-0003',
         documentId: 'DNI 74819203',
         firstName: 'Bruno',
@@ -458,7 +489,7 @@ exports.enrollments = [
     // Matrículas Aprobadas (Completed) en periodos anteriores (2025-II) para Alejandro Mendoza (st-1)
     {
         id: 'en-completed-1',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         studentId: 'st-1',
         courseId: 'c-1', // Álgebra y Trigonometría Avanzada
         academicPeriod: '2025-II',
@@ -468,7 +499,7 @@ exports.enrollments = [
     },
     {
         id: 'en-completed-2',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         studentId: 'st-1',
         courseId: 'c-3', // Programación y Robótica
         academicPeriod: '2025-II',
@@ -479,7 +510,7 @@ exports.enrollments = [
     // Matrículas Activas y de Prueba del periodo 2026-I
     {
         id: 'en-1',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         studentId: 'st-1',
         courseId: 'c-1', // Álgebra (también inscrito activo en el catálogo)
         academicPeriod: '2026-I',
@@ -489,7 +520,7 @@ exports.enrollments = [
     },
     {
         id: 'en-2',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         studentId: 'st-1',
         courseId: 'c-2', // Literatura
         academicPeriod: '2026-I',
@@ -499,7 +530,7 @@ exports.enrollments = [
     },
     {
         id: 'en-3',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         studentId: 'st-2',
         courseId: 'c-1', // Álgebra
         academicPeriod: '2026-I',
@@ -509,7 +540,7 @@ exports.enrollments = [
     },
     {
         id: 'en-4',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         studentId: 'st-3',
         courseId: 'c-2', // Literatura
         academicPeriod: '2026-I',
@@ -524,7 +555,7 @@ exports.enrollments = [
 exports.leads = [
     {
         id: 'ld-1',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         firstName: 'Mateo',
         lastName: 'Silva',
         parentName: 'Sofía Silva',
@@ -539,7 +570,7 @@ exports.leads = [
     },
     {
         id: 'ld-2',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         firstName: 'Valentina',
         lastName: 'Rojas',
         parentName: 'Carlos Rojas',
@@ -554,7 +585,7 @@ exports.leads = [
     },
     {
         id: 'ld-3',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         firstName: 'Thiago',
         lastName: 'Pinedo',
         parentName: 'Milagros Pinedo',
@@ -569,7 +600,7 @@ exports.leads = [
     },
     {
         id: 'ld-4',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         firstName: 'Luciana',
         lastName: 'Herrera',
         parentName: 'Daniel Herrera',
@@ -584,7 +615,7 @@ exports.leads = [
     },
     {
         id: 'ld-5',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         firstName: 'Benjamín',
         lastName: 'Castro',
         parentName: 'Patricia Castro',
@@ -599,7 +630,7 @@ exports.leads = [
     },
     {
         id: 'ld-6',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         firstName: 'Matías',
         lastName: 'Bustamante',
         parentName: 'Jorge Bustamante',
@@ -614,7 +645,7 @@ exports.leads = [
     },
     {
         id: 'ld-7',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         firstName: 'Camila',
         lastName: 'Ortiz',
         parentName: 'Elena Ortiz',
@@ -738,7 +769,7 @@ exports.leadTasks = [
 exports.communicationTemplates = [
     {
         id: 'tmpl-1',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         title: 'Recordatorio de Pago de Mensualidad',
         subject: 'Recordatorio de Pago: Mensualidad Escolar [Mes]',
         body: 'Estimados padres de familia y apoderados, les recordamos que la mensualidad correspondiente al mes de [Mes] vence el día [Fecha Vencimiento]. Agradecemos su puntualidad en los canales de pago autorizados (Bancos afiliados, transferencia o pasarela de pagos digital del colegio).\n\nAtentamente,\nOficina de Tesorería y Cobranzas',
@@ -747,7 +778,7 @@ exports.communicationTemplates = [
     },
     {
         id: 'tmpl-2',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         title: 'Clases Suspendidas por Emergencia Climatológica',
         subject: 'ALERTA URGENTE: Suspensión Preventiva de Clases Presenciales',
         body: 'Estimada comunidad educativa, ante las alertas climatológicas e indicaciones de Defensa Civil, informamos la suspensión preventiva de clases presenciales para el día [Fecha]. Las actividades escolares continuarán de forma virtual a través de nuestras aulas virtuales y plataformas Zoom registradas.\n\nPor favor mantenerse a resguardo y atentos a nuevos comunicados oficiales.\n\nAtentamente,\nDirección General de SincroEdu',
@@ -756,7 +787,7 @@ exports.communicationTemplates = [
     },
     {
         id: 'tmpl-3',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         title: 'Convocatoria a Reunión de Padres y Apoderados',
         subject: 'Convocatoria: Reunión General de Padres de Familia - [Grado/Nivel]',
         body: 'Estimados padres y apoderados, se les convoca formalmente a la Reunión General de Padres de Familia del nivel de [Nivel], que se llevará a cabo el día [Fecha] a las [Hora] en el Auditorio Principal de la Sede Central. Agenda a tratar:\n1. Reporte de avance y rendimiento del periodo.\n2. Planeación de proyectos del trimestre.\n3. Coordinaciones de actividades extracurriculares.\n\nSu asistencia es de carácter obligatorio.\n\nAtentamente,\nCoordinación Académica',
@@ -765,7 +796,7 @@ exports.communicationTemplates = [
     },
     {
         id: 'tmpl-4',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         title: 'Boletín Académico Mensual',
         subject: 'Boletín SincroEdu: Resumen Informativo y Logros del Mes',
         body: 'Queridas familias, les compartimos nuestro Boletín Académico del mes, donde celebramos los logros y el esfuerzo de nuestros alumnos en los diversos talleres de robótica, proyectos artísticos y competiciones deportivas. Asimismo, les adjuntamos el calendario de exámenes finales y feriados escolares.\n\n¡Gracias por ser parte del crecimiento formativo de sus hijos!\n\nAtentamente,\nDirección Académica',
@@ -776,7 +807,7 @@ exports.communicationTemplates = [
 exports.communicationMessages = [
     {
         id: 'msg-1',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         senderId: 'u-admin1',
         senderName: 'Santiago Delgado',
         senderRole: 'Dirección General',
@@ -790,7 +821,7 @@ exports.communicationMessages = [
     },
     {
         id: 'msg-2',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         senderId: 'u-prof1',
         senderName: 'Alejandro Mendoza',
         senderRole: 'Profesor de Ciencias',
@@ -805,7 +836,7 @@ exports.communicationMessages = [
     },
     {
         id: 'msg-3',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         senderId: 'u-auxiliar1',
         senderName: 'Mariana Rosas',
         senderRole: 'Oficina de Admisión',
@@ -896,7 +927,7 @@ exports.communicationRecipients = [
 exports.gradeScales = [
     {
         id: 'gs-t1-1',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         name: 'Vigesimal (0-20) - Tradicional Perú',
         type: 'numeric-20',
         minGrade: 0,
@@ -905,7 +936,7 @@ exports.gradeScales = [
     },
     {
         id: 'gs-t1-2',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         name: 'Escala de Competencias (AD, A, B, C) - CNEB Perú',
         type: 'competency',
         minGrade: 0,
@@ -914,7 +945,7 @@ exports.gradeScales = [
     },
     {
         id: 'gs-t2-1',
-        tenantId: 't-22222222-2222-2222-2222-222222222222',
+        tenantId: 'bb820465-b778-43d9-a723-f390035cb3c8',
         name: 'Escala Centesimal (0-100) - México',
         type: 'numeric-100',
         minGrade: 0,
@@ -927,7 +958,7 @@ exports.evaluationStructures = [
     // Curso 1 (Álgebra) -> Exámenes 50%, Tareas 30%, Proyectos 20%
     {
         id: 'es-c1-exam',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         courseId: 'c-1',
         name: 'Exámenes Mensuales',
         weight: 50,
@@ -935,7 +966,7 @@ exports.evaluationStructures = [
     },
     {
         id: 'es-c1-homework',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         courseId: 'c-1',
         name: 'Tareas y Prácticas',
         weight: 30,
@@ -943,7 +974,7 @@ exports.evaluationStructures = [
     },
     {
         id: 'es-c1-project',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         courseId: 'c-1',
         name: 'Proyecto de Álgebra Aplicada',
         weight: 20,
@@ -952,7 +983,7 @@ exports.evaluationStructures = [
     // Curso 2 (Literatura) -> Redacción 40%, Lecturas 40%, Participación 20%
     {
         id: 'es-c2-writing',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         courseId: 'c-2',
         name: 'Redacción y Ensayos',
         weight: 40,
@@ -960,7 +991,7 @@ exports.evaluationStructures = [
     },
     {
         id: 'es-c2-reading',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         courseId: 'c-2',
         name: 'Fichas de Lectura',
         weight: 40,
@@ -968,7 +999,7 @@ exports.evaluationStructures = [
     },
     {
         id: 'es-c2-part',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         courseId: 'c-2',
         name: 'Debate y Participación',
         weight: 20,
@@ -980,7 +1011,7 @@ exports.gradeRecords = [
     // Álgebra (c-1) - Alejandro Mendoza (st-1) -> Exámenes 16, Tareas 18, Proyecto 17 -> Promedio ponderado: 16.8
     {
         id: 'gr-1',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         studentId: 'st-1',
         courseId: 'c-1',
         evaluationStructureId: 'es-c1-exam',
@@ -992,7 +1023,7 @@ exports.gradeRecords = [
     },
     {
         id: 'gr-2',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         studentId: 'st-1',
         courseId: 'c-1',
         evaluationStructureId: 'es-c1-homework',
@@ -1004,7 +1035,7 @@ exports.gradeRecords = [
     },
     {
         id: 'gr-3',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         studentId: 'st-1',
         courseId: 'c-1',
         evaluationStructureId: 'es-c1-project',
@@ -1018,7 +1049,7 @@ exports.gradeRecords = [
     // Álgebra (c-1) - Valeria Campos (st-2) -> Exámenes 14, Tareas 12, Proyecto 15 -> Promedio: 13.6
     {
         id: 'gr-4',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         studentId: 'st-2',
         courseId: 'c-1',
         evaluationStructureId: 'es-c1-exam',
@@ -1030,7 +1061,7 @@ exports.gradeRecords = [
     },
     {
         id: 'gr-5',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         studentId: 'st-2',
         courseId: 'c-1',
         evaluationStructureId: 'es-c1-homework',
@@ -1042,7 +1073,7 @@ exports.gradeRecords = [
     },
     {
         id: 'gr-6',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         studentId: 'st-2',
         courseId: 'c-1',
         evaluationStructureId: 'es-c1-project',
@@ -1055,7 +1086,7 @@ exports.gradeRecords = [
     // Literatura (c-2) - Alejandro Mendoza (st-1) -> Redacción 18 (AD), Lecturas 16 (A), Participación 19 (AD)
     {
         id: 'gr-7',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         studentId: 'st-1',
         courseId: 'c-2',
         evaluationStructureId: 'es-c2-writing',
@@ -1068,7 +1099,7 @@ exports.gradeRecords = [
     },
     {
         id: 'gr-8',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         studentId: 'st-1',
         courseId: 'c-2',
         evaluationStructureId: 'es-c2-reading',
@@ -1081,7 +1112,7 @@ exports.gradeRecords = [
     },
     {
         id: 'gr-9',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         studentId: 'st-1',
         courseId: 'c-2',
         evaluationStructureId: 'es-c2-part',
@@ -1098,14 +1129,14 @@ exports.gradeRecords = [
 exports.periodLocks = [
     {
         id: 'pl-1',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         academicPeriod: '2026-I',
         courseId: 'c-1',
         isLocked: false
     },
     {
         id: 'pl-2',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         academicPeriod: '2026-I',
         courseId: 'c-2',
         isLocked: false
@@ -1115,7 +1146,7 @@ exports.periodLocks = [
 exports.gradeAuditLogs = [
     {
         id: 'gal-1',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         courseId: 'c-1',
         studentId: 'st-1',
         evaluationStructureId: 'es-c1-homework',
@@ -1130,7 +1161,7 @@ exports.gradeAuditLogs = [
     },
     {
         id: 'gal-2',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         courseId: 'c-1',
         studentId: 'st-1',
         evaluationStructureId: 'es-c1-exam',
@@ -1150,7 +1181,7 @@ exports.gradeAuditLogs = [
 exports.creditPricings = [
     {
         id: 'pr-t1',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         academicPeriod: '2026-I',
         pricePerCredit: 100.00,
         createdAt: '2026-03-01T08:00:00Z',
@@ -1170,7 +1201,7 @@ exports.studentGuardians = [
 exports.receivables = [
     {
         id: '77a7fa71-5582-45a8-b6cb-918991ef2361',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         studentId: 'st-1',
         enrollmentId: 'en-1',
         concept: 'Matrícula Álgebra y Trigonometría Avanzada (5 créditos)',
@@ -1183,7 +1214,7 @@ exports.receivables = [
     },
     {
         id: '77a7fa71-5582-45a8-b6cb-918991ef2362',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         studentId: 'st-1',
         enrollmentId: 'en-2',
         concept: 'Matrícula Literatura Hispanoamericana (4 créditos)',
@@ -1196,7 +1227,7 @@ exports.receivables = [
     },
     {
         id: '77a7fa71-5582-45a8-b6cb-918991ef2363',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         studentId: 'st-2',
         enrollmentId: 'en-3',
         concept: 'Matrícula Álgebra y Trigonometría Avanzada (5 créditos)',
@@ -1211,7 +1242,7 @@ exports.receivables = [
 exports.payables = [
     {
         id: '99a7fa71-5582-45a8-b6cb-918991ef2361',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         professorId: 'p-1',
         concept: 'Pago de nómina Mayo 2026 - Mateo Silva (30 horas dictadas)',
         amount: 1500.00,
@@ -1225,7 +1256,7 @@ exports.payables = [
 exports.transactions = [
     {
         id: 'cc17fa71-5582-45a8-b6cb-918991ef2361',
-        tenantId: 't-11111111-1111-1111-1111-111111111111',
+        tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364',
         receivableId: '77a7fa71-5582-45a8-b6cb-918991ef2361',
         payableId: null,
         type: 'INCOME',
@@ -1239,18 +1270,18 @@ exports.transactions = [
     }
 ];
 exports.ledgerAccounts = [
-    { id: '10100', tenantId: 't-11111111-1111-1111-1111-111111111111', name: 'Efectivo y Equivalentes de Efectivo (Caja/Bancos)', type: 'ASSET', createdAt: '2026-03-01T08:00:00Z' },
-    { id: '12100', tenantId: 't-11111111-1111-1111-1111-111111111111', name: 'Cuentas por Cobrar Comerciales (Pensiones/Créditos)', type: 'ASSET', createdAt: '2026-03-01T08:00:00Z' },
-    { id: '21100', tenantId: 't-11111111-1111-1111-1111-111111111111', name: 'Cuentas por Pagar Comerciales (Nómina Docente)', type: 'LIABILITY', createdAt: '2026-03-01T08:00:00Z' },
-    { id: '40100', tenantId: 't-11111111-1111-1111-1111-111111111111', name: 'Ingresos por Servicios Educativos (Mensualidades)', type: 'REVENUE', createdAt: '2026-03-01T08:00:00Z' },
-    { id: '50100', tenantId: 't-11111111-1111-1111-1111-111111111111', name: 'Gastos de Personal - Nómina de Profesores', type: 'EXPENSE', createdAt: '2026-03-01T08:00:00Z' }
+    { id: '10100', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', name: 'Efectivo y Equivalentes de Efectivo (Caja/Bancos)', type: 'ASSET', createdAt: '2026-03-01T08:00:00Z' },
+    { id: '12100', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', name: 'Cuentas por Cobrar Comerciales (Pensiones/Créditos)', type: 'ASSET', createdAt: '2026-03-01T08:00:00Z' },
+    { id: '21100', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', name: 'Cuentas por Pagar Comerciales (Nómina Docente)', type: 'LIABILITY', createdAt: '2026-03-01T08:00:00Z' },
+    { id: '40100', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', name: 'Ingresos por Servicios Educativos (Mensualidades)', type: 'REVENUE', createdAt: '2026-03-01T08:00:00Z' },
+    { id: '50100', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', name: 'Gastos de Personal - Nómina de Profesores', type: 'EXPENSE', createdAt: '2026-03-01T08:00:00Z' }
 ];
 exports.ledgerEntries = [
-    { id: 'e1a7fa71-5582-45a8-b6cb-918991ef2361', tenantId: 't-11111111-1111-1111-1111-111111111111', transactionId: null, entryDate: '2026-04-01T08:00:00Z', description: 'Provisión de pensión - Alejandro Mendoza - MAT-101', createdAt: '2026-04-01T08:00:00Z' },
-    { id: 'e1a7fa71-5582-45a8-b6cb-918991ef2362', tenantId: 't-11111111-1111-1111-1111-111111111111', transactionId: null, entryDate: '2026-05-01T08:00:00Z', description: 'Provisión de pensión - Alejandro Mendoza - LIT-204', createdAt: '2026-05-01T08:00:00Z' },
-    { id: 'e1a7fa71-5582-45a8-b6cb-918991ef2363', tenantId: 't-11111111-1111-1111-1111-111111111111', transactionId: null, entryDate: '2026-05-01T08:05:00Z', description: 'Provisión de pensión - Valeria Campos - MAT-101', createdAt: '2026-05-01T08:05:00Z' },
-    { id: 'e2a7fa71-5582-45a8-b6cb-918991ef2361', tenantId: 't-11111111-1111-1111-1111-111111111111', transactionId: 'cc17fa71-5582-45a8-b6cb-918991ef2361', entryDate: '2026-04-09T14:30:00Z', description: 'Cobro de pensión en línea - Recibo 77a7fa71', createdAt: '2026-04-09T14:30:00Z' },
-    { id: 'e3a7fa71-5582-45a8-b6cb-918991ef2361', tenantId: 't-11111111-1111-1111-1111-111111111111', transactionId: null, entryDate: '2026-05-25T08:00:00Z', description: 'Provisión nómina docente - Mateo Silva - Mayo 2026', createdAt: '2026-05-25T08:00:00Z' }
+    { id: 'e1a7fa71-5582-45a8-b6cb-918991ef2361', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', transactionId: null, entryDate: '2026-04-01T08:00:00Z', description: 'Provisión de pensión - Alejandro Mendoza - MAT-101', createdAt: '2026-04-01T08:00:00Z' },
+    { id: 'e1a7fa71-5582-45a8-b6cb-918991ef2362', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', transactionId: null, entryDate: '2026-05-01T08:00:00Z', description: 'Provisión de pensión - Alejandro Mendoza - LIT-204', createdAt: '2026-05-01T08:00:00Z' },
+    { id: 'e1a7fa71-5582-45a8-b6cb-918991ef2363', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', transactionId: null, entryDate: '2026-05-01T08:05:00Z', description: 'Provisión de pensión - Valeria Campos - MAT-101', createdAt: '2026-05-01T08:05:00Z' },
+    { id: 'e2a7fa71-5582-45a8-b6cb-918991ef2361', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', transactionId: 'cc17fa71-5582-45a8-b6cb-918991ef2361', entryDate: '2026-04-09T14:30:00Z', description: 'Cobro de pensión en línea - Recibo 77a7fa71', createdAt: '2026-04-09T14:30:00Z' },
+    { id: 'e3a7fa71-5582-45a8-b6cb-918991ef2361', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', transactionId: null, entryDate: '2026-05-25T08:00:00Z', description: 'Provisión nómina docente - Mateo Silva - Mayo 2026', createdAt: '2026-05-25T08:00:00Z' }
 ];
 exports.ledgerLines = [
     { id: 'l1', entryId: 'e1a7fa71-5582-45a8-b6cb-918991ef2361', accountId: '12100', debit: 500.00, credit: 0.00, createdAt: '2026-04-01T08:00:00Z' },
@@ -1265,14 +1296,35 @@ exports.ledgerLines = [
     { id: 'l10', entryId: 'e3a7fa71-5582-45a8-b6cb-918991ef2361', accountId: '21100', debit: 0.00, credit: 1500.00, createdAt: '2026-05-25T08:00:00Z' }
 ];
 exports.professorAttendances = [
-    { id: 'att-1', tenantId: 't-11111111-1111-1111-1111-111111111111', professorId: 'p-1', courseId: 'c-1', classDate: '2026-05-02', scheduledHours: 3.0, hoursWorked: 3.0, status: 'PRESENT', createdAt: '2026-05-02T10:00:00Z' },
-    { id: 'att-2', tenantId: 't-11111111-1111-1111-1111-111111111111', professorId: 'p-1', courseId: 'c-1', classDate: '2026-05-05', scheduledHours: 3.0, hoursWorked: 3.0, status: 'PRESENT', createdAt: '2026-05-05T10:00:00Z' },
-    { id: 'att-3', tenantId: 't-11111111-1111-1111-1111-111111111111', professorId: 'p-1', courseId: 'c-1', classDate: '2026-05-09', scheduledHours: 3.0, hoursWorked: 3.0, status: 'PRESENT', createdAt: '2026-05-09T10:00:00Z' },
-    { id: 'att-4', tenantId: 't-11111111-1111-1111-1111-111111111111', professorId: 'p-1', courseId: 'c-1', classDate: '2026-05-12', scheduledHours: 3.0, hoursWorked: 3.0, status: 'PRESENT', createdAt: '2026-05-12T10:00:00Z' },
-    { id: 'att-5', tenantId: 't-11111111-1111-1111-1111-111111111111', professorId: 'p-1', courseId: 'c-1', classDate: '2026-05-16', scheduledHours: 3.0, hoursWorked: 3.0, status: 'PRESENT', createdAt: '2026-05-16T10:00:00Z' },
-    { id: 'att-6', tenantId: 't-11111111-1111-1111-1111-111111111111', professorId: 'p-1', courseId: 'c-1', classDate: '2026-05-19', scheduledHours: 3.0, hoursWorked: 0.0, status: 'ABSENT', createdAt: '2026-05-19T10:00:00Z' },
-    { id: 'att-7', tenantId: 't-11111111-1111-1111-1111-111111111111', professorId: 'p-1', courseId: 'c-1', classDate: '2026-05-23', scheduledHours: 3.0, hoursWorked: 3.0, status: 'PRESENT', createdAt: '2026-05-23T10:00:00Z' },
-    { id: 'att-8', tenantId: 't-11111111-1111-1111-1111-111111111111', professorId: 'p-1', courseId: 'c-1', classDate: '2026-05-26', scheduledHours: 3.0, hoursWorked: 3.0, status: 'PRESENT', createdAt: '2026-05-26T10:00:00Z' },
-    { id: 'att-9', tenantId: 't-11111111-1111-1111-1111-111111111111', professorId: 'p-1', courseId: 'c-1', classDate: '2026-05-30', scheduledHours: 3.0, hoursWorked: 3.0, status: 'PRESENT', createdAt: '2026-05-30T10:00:00Z' },
-    { id: 'att-10', tenantId: 't-11111111-1111-1111-1111-111111111111', professorId: 'p-1', courseId: 'c-1', classDate: '2026-05-31', scheduledHours: 3.0, hoursWorked: 3.0, status: 'PRESENT', createdAt: '2026-05-31T10:00:00Z' }
+    { id: 'att-1', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', professorId: 'p-1', courseId: 'c-1', classDate: '2026-05-02', scheduledHours: 3.0, hoursWorked: 3.0, status: 'PRESENT', createdAt: '2026-05-02T10:00:00Z' },
+    { id: 'att-2', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', professorId: 'p-1', courseId: 'c-1', classDate: '2026-05-05', scheduledHours: 3.0, hoursWorked: 3.0, status: 'PRESENT', createdAt: '2026-05-05T10:00:00Z' },
+    { id: 'att-3', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', professorId: 'p-1', courseId: 'c-1', classDate: '2026-05-09', scheduledHours: 3.0, hoursWorked: 3.0, status: 'PRESENT', createdAt: '2026-05-09T10:00:00Z' },
+    { id: 'att-4', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', professorId: 'p-1', courseId: 'c-1', classDate: '2026-05-12', scheduledHours: 3.0, hoursWorked: 3.0, status: 'PRESENT', createdAt: '2026-05-12T10:00:00Z' },
+    { id: 'att-5', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', professorId: 'p-1', courseId: 'c-1', classDate: '2026-05-16', scheduledHours: 3.0, hoursWorked: 3.0, status: 'PRESENT', createdAt: '2026-05-16T10:00:00Z' },
+    { id: 'att-6', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', professorId: 'p-1', courseId: 'c-1', classDate: '2026-05-19', scheduledHours: 3.0, hoursWorked: 0.0, status: 'ABSENT', createdAt: '2026-05-19T10:00:00Z' },
+    { id: 'att-7', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', professorId: 'p-1', courseId: 'c-1', classDate: '2026-05-23', scheduledHours: 3.0, hoursWorked: 3.0, status: 'PRESENT', createdAt: '2026-05-23T10:00:00Z' },
+    { id: 'att-8', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', professorId: 'p-1', courseId: 'c-1', classDate: '2026-05-26', scheduledHours: 3.0, hoursWorked: 3.0, status: 'PRESENT', createdAt: '2026-05-26T10:00:00Z' },
+    { id: 'att-9', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', professorId: 'p-1', courseId: 'c-1', classDate: '2026-05-30', scheduledHours: 3.0, hoursWorked: 3.0, status: 'PRESENT', createdAt: '2026-05-30T10:00:00Z' },
+    { id: 'att-10', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', professorId: 'p-1', courseId: 'c-1', classDate: '2026-05-31', scheduledHours: 3.0, hoursWorked: 3.0, status: 'PRESENT', createdAt: '2026-05-31T10:00:00Z' }
+];
+exports.mockClassrooms = [
+    { id: '11111111-2222-3333-4444-555555555551', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', campusId: 'cp-1', name: 'Aula 101 - Pabellón A', type: 'classroom', capacity: 30, status: 'active' },
+    { id: '11111111-2222-3333-4444-555555555552', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', campusId: 'cp-1', name: 'Aula 102 - Pabellón A', type: 'classroom', capacity: 35, status: 'active' },
+    { id: '11111111-2222-3333-4444-555555555553', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', campusId: 'cp-2', name: 'Laboratorio Alfa Robótica', type: 'laboratory', capacity: 20, status: 'active' },
+    { id: '11111111-2222-3333-4444-555555555554', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', campusId: 'cp-3', name: 'Aula Virtual Zoom General A', type: 'virtual_room', capacity: 100, status: 'active' }
+];
+exports.mockTimeSlots = [
+    { id: '22222222-3333-4444-5555-666666666661', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', name: 'Lunes Mañana 1', dayOfWeek: 1, startTime: '08:00:00', endTime: '10:00:00', type: 'standard' },
+    { id: '22222222-3333-4444-5555-666666666662', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', name: 'Lunes Mañana 2', dayOfWeek: 1, startTime: '10:30:00', endTime: '12:30:00', type: 'standard' },
+    { id: '22222222-3333-4444-5555-666666666663', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', name: 'Miércoles Mañana 1', dayOfWeek: 3, startTime: '08:00:00', endTime: '10:00:00', type: 'standard' },
+    { id: '22222222-3333-4444-5555-666666666664', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', name: 'Viernes Mañana 1', dayOfWeek: 5, startTime: '08:00:00', endTime: '10:00:00', type: 'standard' }
+];
+exports.mockProfessorAvailabilities = [
+    { id: 'pa-1', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', professorId: 'p-1', dayOfWeek: 1, startTime: '08:00:00', endTime: '13:00:00' },
+    { id: 'pa-2', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', professorId: 'p-1', dayOfWeek: 3, startTime: '08:00:00', endTime: '13:00:00' },
+    { id: 'pa-3', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', professorId: 'p-1', dayOfWeek: 5, startTime: '08:00:00', endTime: '13:00:00' }
+];
+exports.mockSchedules = [
+    { id: 'sch-1', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', courseId: 'c-1', professorId: 'p-1', classroomId: '11111111-2222-3333-4444-555555555551', timeSlotId: '22222222-3333-4444-5555-666666666661', academicPeriod: '2026-I', sectionCode: 'A', status: 'published' },
+    { id: 'sch-2', tenantId: '44b7fa71-5582-45a8-b6cb-918991ef2364', courseId: 'c-2', classroomId: '11111111-2222-3333-4444-555555555552', timeSlotId: '22222222-3333-4444-5555-666666666662', academicPeriod: '2026-I', sectionCode: 'A', status: 'draft' }
 ];
