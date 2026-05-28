@@ -39,13 +39,13 @@ exports.tenants = [
     }
 ];
 exports.menuOptions = [
-    { id: 'm-1', parentId: null, title: 'Panel de KPIs y Rentabilidad', icon: 'LayoutDashboard', route: '/dashboard', sortOrder: 1, module: 'dashboard', isActive: true },
-    { id: 'm-10', parentId: null, title: 'CRM y Captación de Leads', icon: 'Target', route: '/dashboard/crm', sortOrder: 2, module: 'crm', isActive: true },
-    { id: 'm-4', parentId: null, title: 'Gestión de Sedes (Aulas/Espacios)', icon: 'MapPin', route: '/dashboard/campuses', sortOrder: 3, module: 'sedes', isActive: true },
-    { id: 'm-5', parentId: null, title: 'Expedientes y Matrícula', icon: 'FileText', route: '/dashboard/students', sortOrder: 4, module: 'matriculas', isActive: true },
+    { id: 'm-1', parentId: null, title: 'KPIs', icon: 'LayoutDashboard', route: '/dashboard', sortOrder: 1, module: 'dashboard', isActive: true },
+    { id: 'm-10', parentId: null, title: 'CRM y Leads', icon: 'Target', route: '/dashboard/crm', sortOrder: 2, module: 'crm', isActive: true },
+    { id: 'm-4', parentId: null, title: 'Sedes', icon: 'MapPin', route: '/dashboard/campuses', sortOrder: 3, module: 'sedes', isActive: true },
+    { id: 'm-5', parentId: null, title: 'Alumnos', icon: 'FileText', route: '/dashboard/students', sortOrder: 4, module: 'matriculas', isActive: true },
     { id: 'm-6', parentId: null, title: 'Calificaciones Académicas', icon: 'Award', route: '/dashboard/grades', sortOrder: 5, module: 'calificaciones', isActive: true },
-    { id: 'm-7', parentId: null, title: 'Procesamiento de Pagos y Cobranzas', icon: 'CreditCard', route: '/dashboard/payments', sortOrder: 6, module: 'pagos', isActive: true },
-    { id: 'm-8', parentId: null, title: 'Programación Predictiva (Inteligencia)', icon: 'CalendarDays', route: '/dashboard/predictive', sortOrder: 7, module: 'predicciones', isActive: true },
+    { id: 'm-7', parentId: null, title: 'Pagos y cobros', icon: 'CreditCard', route: '/dashboard/payments', sortOrder: 6, module: 'pagos', isActive: true },
+    { id: 'm-8', parentId: null, title: 'Programación predictiva', icon: 'CalendarDays', route: '/dashboard/predictive', sortOrder: 7, module: 'predicciones', isActive: true },
     { id: 'm-9', parentId: null, title: 'Centro de Comunicación', icon: 'MessageSquare', route: '/dashboard/comms', sortOrder: 8, module: 'comunicaciones', isActive: true },
     { id: 'm-11', parentId: null, title: 'Herramientas Administrativas', icon: 'ShieldAlert', route: '/dashboard/admin', sortOrder: 9, module: 'administracion', isActive: true },
     { id: 'm-config', parentId: null, title: 'Configuración', icon: 'Settings', route: '/dashboard/config', sortOrder: 10, module: 'config', isActive: true },

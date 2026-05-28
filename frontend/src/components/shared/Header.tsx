@@ -42,13 +42,13 @@ export default function Header() {
     switch (lastPart) {
       case 'courses': return 'Catálogo de Cursos y Oferta';
       case 'professors': return 'Gestión de Facultad (Profesores)';
-      case 'campuses': return 'Gestión de Sedes (Aulas)';
-      case 'students': return 'Expedientes y Matrícula';
+      case 'campuses': return 'Sedes';
+      case 'students': return 'Alumnos';
       case 'grades': return 'Calificaciones Académicas';
-      case 'payments': return 'Procesamiento de Pagos y Cobranzas';
-      case 'predictive': return 'Programación Predictiva';
+      case 'payments': return 'Pagos y cobros';
+      case 'predictive': return 'Programación predictiva';
       case 'comms': return 'Centro de Comunicación';
-      case 'crm': return 'CRM y Captación de Leads';
+      case 'crm': return 'CRM y Leads';
       case 'admin': return 'Herramientas Administrativas';
       default: return lastPart.charAt(0).toUpperCase() + lastPart.slice(1);
     }

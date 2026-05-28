@@ -334,7 +334,7 @@ export default function CampusesPage() {
             <Building className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-[#1C2C35]">Gestión de Sedes y Aulas</h1>
+            <h1 className="text-xl font-bold text-[#1C2C35]">Sedes</h1>
             <p className="text-xs text-slate-400">Control de campus físicos, laboratorios virtuales, capacidades aforo e historial de mantenimiento.</p>
           </div>
         </div>

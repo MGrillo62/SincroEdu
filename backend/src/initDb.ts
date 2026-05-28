@@ -187,16 +187,16 @@ async function initDatabase() {
     // B. Insertar Opciones de Menú
     await client.query(`
       INSERT INTO menu_options (id, parent_id, title, icon, route, sort_order, module, is_active) VALUES
-      ('m-1', NULL, 'Panel de KPIs y Rentabilidad', 'LayoutDashboard', '/dashboard', 1, 'dashboard', TRUE),
+      ('m-1', NULL, 'KPIs', 'LayoutDashboard', '/dashboard', 1, 'dashboard', TRUE),
       ('m-2', NULL, 'Catálogo de Cursos y Oferta', 'BookOpen', '/dashboard/courses', 2, 'cursos', TRUE),
       ('m-3', NULL, 'Gestión de Facultad (Profesores)', 'Users', '/dashboard/professors', 3, 'facultad', TRUE),
-      ('m-4', NULL, 'Gestión de Sedes (Aulas/Espacios)', 'MapPin', '/dashboard/campuses', 4, 'sedes', TRUE),
-      ('m-5', NULL, 'Expedientes y Matrícula', 'FileText', '/dashboard/students', 5, 'matriculas', TRUE),
+      ('m-4', NULL, 'Sedes', 'MapPin', '/dashboard/campuses', 4, 'sedes', TRUE),
+      ('m-5', NULL, 'Alumnos', 'FileText', '/dashboard/students', 5, 'matriculas', TRUE),
       ('m-6', NULL, 'Calificaciones Académicas', 'Award', '/dashboard/grades', 6, 'calificaciones', TRUE),
-      ('m-7', NULL, 'Procesamiento de Pagos y Cobranzas', 'CreditCard', '/dashboard/payments', 7, 'pagos', TRUE),
-      ('m-8', NULL, 'Programación Predictiva (Inteligencia)', 'CalendarDays', '/dashboard/predictive', 8, 'predicciones', TRUE),
+      ('m-7', NULL, 'Pagos y cobros', 'CreditCard', '/dashboard/payments', 7, 'pagos', TRUE),
+      ('m-8', NULL, 'Programación predictiva', 'CalendarDays', '/dashboard/predictive', 8, 'predicciones', TRUE),
       ('m-9', NULL, 'Centro de Comunicación', 'MessageSquare', '/dashboard/comms', 9, 'comunicaciones', TRUE),
-      ('m-10', NULL, 'CRM y Captación de Leads', 'Target', '/dashboard/crm', 10, 'crm', TRUE),
+      ('m-10', NULL, 'CRM y Leads', 'Target', '/dashboard/crm', 10, 'crm', TRUE),
       ('m-11', NULL, 'Herramientas Administrativas', 'ShieldAlert', '/dashboard/admin', 11, 'administracion', TRUE);
     `);
     console.log(' - Módulos del menú insertados.');

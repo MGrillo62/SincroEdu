@@ -563,7 +563,7 @@ export default function StudentsPage() {
             <FileText className="w-7 h-7 text-[#6B8E4E]" />
           </div>
           <div>
-            <h1 className="text-xl font-black text-[#1C2C35]">Módulo de Expedientes y Matrícula</h1>
+            <h1 className="text-xl font-black text-[#1C2C35]">Alumnos</h1>
             <p className="text-xs text-slate-400 font-semibold">Administra expedientes académicos, datos personales e inscripciones del periodo actual</p>
           </div>
         </div>

@@ -515,7 +515,7 @@ export default function CRMPage() {
             <Target className="w-6 h-6 animate-pulse" />
           </div>
           <div>
-            <h1 className="text-xl font-black text-[#1C2C35]">CRM y Captación de Leads</h1>
+            <h1 className="text-xl font-black text-[#1C2C35]">CRM y Leads</h1>
             <p className="text-xs text-slate-400">Controla el embudo de admisiones de tu escuela y maximiza el índice de conversión de matrículas.</p>
           </div>
         </div>
