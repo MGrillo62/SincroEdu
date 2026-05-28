@@ -97,6 +97,45 @@ export interface LeadTask {
   createdAt: string;
 }
 
+export interface CommunicationMessage {
+  id: string;
+  tenantId: string;
+  senderId: string;
+  senderName: string;
+  senderRole: string;      // Rol (ej: "Director", "Profesor", "Administración")
+  subject: string;         // Asunto o Título
+  body: string;            // Contenido / Cuerpo del boletín o mensaje
+  category: 'general' | 'academic' | 'billing' | 'emergency' | 'event'; // Segmentación temática
+  targetGroup: 'all' | 'teachers' | 'parents' | 'students' | 'grade' | 'individual'; // Destinatarios
+  targetGrade?: string;    // Grado específico (ej: "Secundaria 3°") si targetGroup === 'grade'
+  attachmentUrl?: string;  // Nombre de circular adjunta (ej: "Circular_Admision_2026.pdf")
+  deliveryChannels: ('in_app' | 'email' | 'whatsapp')[]; // Canales elegidos
+  createdAt: string;
+}
+
+export interface CommunicationRecipient {
+  id: string;
+  messageId: string;
+  recipientId: string;
+  recipientName: string;
+  recipientRole: 'admin' | 'teacher' | 'parent' | 'student';
+  inAppStatus: 'unread' | 'read';
+  emailStatus: 'pending' | 'sent' | 'failed' | 'not_requested';
+  whatsappStatus: 'pending' | 'sent' | 'failed' | 'not_requested';
+  readAt?: string;         // Fecha exacta de confirmación de lectura en in-app
+  updatedAt: string;
+}
+
+export interface CommunicationTemplate {
+  id: string;
+  tenantId: string;
+  title: string;           // Nombre de plantilla
+  subject: string;         // Asunto preestablecido
+  body: string;            // Contenido preestablecido
+  category: 'general' | 'academic' | 'billing' | 'emergency' | 'event';
+  createdAt: string;
+}
+
 // -------------------------------------------------------------
 // MOCK DATA INITIALIZATION
 // -------------------------------------------------------------
@@ -913,6 +952,171 @@ export const leadTasks: LeadTask[] = [
     createdAt: '2026-05-24T12:10:00Z'
   }
 ];
+
+// -------------------------------------------------------------
+// COMMS SEEDS & MOCK DATA Arrays
+// -------------------------------------------------------------
+
+export const communicationTemplates: CommunicationTemplate[] = [
+  {
+    id: 'tmpl-1',
+    tenantId: 't-11111111-1111-1111-1111-111111111111',
+    title: 'Recordatorio de Pago de Mensualidad',
+    subject: 'Recordatorio de Pago: Mensualidad Escolar [Mes]',
+    body: 'Estimados padres de familia y apoderados, les recordamos que la mensualidad correspondiente al mes de [Mes] vence el día [Fecha Vencimiento]. Agradecemos su puntualidad en los canales de pago autorizados (Bancos afiliados, transferencia o pasarela de pagos digital del colegio).\n\nAtentamente,\nOficina de Tesorería y Cobranzas',
+    category: 'billing',
+    createdAt: '2026-05-01T08:00:00Z'
+  },
+  {
+    id: 'tmpl-2',
+    tenantId: 't-11111111-1111-1111-1111-111111111111',
+    title: 'Clases Suspendidas por Emergencia Climatológica',
+    subject: 'ALERTA URGENTE: Suspensión Preventiva de Clases Presenciales',
+    body: 'Estimada comunidad educativa, ante las alertas climatológicas e indicaciones de Defensa Civil, informamos la suspensión preventiva de clases presenciales para el día [Fecha]. Las actividades escolares continuarán de forma virtual a través de nuestras aulas virtuales y plataformas Zoom registradas.\n\nPor favor mantenerse a resguardo y atentos a nuevos comunicados oficiales.\n\nAtentamente,\nDirección General de SincroEdu',
+    category: 'emergency',
+    createdAt: '2026-05-02T09:00:00Z'
+  },
+  {
+    id: 'tmpl-3',
+    tenantId: 't-11111111-1111-1111-1111-111111111111',
+    title: 'Convocatoria a Reunión de Padres y Apoderados',
+    subject: 'Convocatoria: Reunión General de Padres de Familia - [Grado/Nivel]',
+    body: 'Estimados padres y apoderados, se les convoca formalmente a la Reunión General de Padres de Familia del nivel de [Nivel], que se llevará a cabo el día [Fecha] a las [Hora] en el Auditorio Principal de la Sede Central. Agenda a tratar:\n1. Reporte de avance y rendimiento del periodo.\n2. Planeación de proyectos del trimestre.\n3. Coordinaciones de actividades extracurriculares.\n\nSu asistencia es de carácter obligatorio.\n\nAtentamente,\nCoordinación Académica',
+    category: 'event',
+    createdAt: '2026-05-03T10:00:00Z'
+  },
+  {
+    id: 'tmpl-4',
+    tenantId: 't-11111111-1111-1111-1111-111111111111',
+    title: 'Boletín Académico Mensual',
+    subject: 'Boletín SincroEdu: Resumen Informativo y Logros del Mes',
+    body: 'Queridas familias, les compartimos nuestro Boletín Académico del mes, donde celebramos los logros y el esfuerzo de nuestros alumnos en los diversos talleres de robótica, proyectos artísticos y competiciones deportivas. Asimismo, les adjuntamos el calendario de exámenes finales y feriados escolares.\n\n¡Gracias por ser parte del crecimiento formativo de sus hijos!\n\nAtentamente,\nDirección Académica',
+    category: 'academic',
+    createdAt: '2026-05-04T11:00:00Z'
+  }
+];
+
+export const communicationMessages: CommunicationMessage[] = [
+  {
+    id: 'msg-1',
+    tenantId: 't-11111111-1111-1111-1111-111111111111',
+    senderId: 'u-admin1',
+    senderName: 'Santiago Delgado',
+    senderRole: 'Dirección General',
+    subject: 'Inicio del Ciclo Académico 2026-I y Normas de Convivencia',
+    body: 'Estimados padres y alumnos, les damos una cordial bienvenida al nuevo ciclo escolar. Les adjuntamos la circular detallada que contiene el reglamento interno, horarios de ingreso, normas de convivencia y políticas de aforo en nuestras aulas presenciales y virtuales. Esperamos iniciar con el máximo entusiasmo académico.',
+    category: 'general',
+    targetGroup: 'all',
+    attachmentUrl: 'Circular_Inicio_Ciclo_2026.pdf',
+    deliveryChannels: ['in_app', 'email'],
+    createdAt: '2026-05-25T08:00:00Z'
+  },
+  {
+    id: 'msg-2',
+    tenantId: 't-11111111-1111-1111-1111-111111111111',
+    senderId: 'u-prof1',
+    senderName: 'Alejandro Mendoza',
+    senderRole: 'Profesor de Ciencias',
+    subject: 'Guía de Prácticas de Laboratorio de Robótica y Electrónica',
+    body: 'Estimados alumnos y padres del aula de Secundaria 1°, les comparto la guía de laboratorio que estaremos ejecutando este jueves en la sede principal. Es requisito indispensable revisar previamente los diagramas de circuitos y traer los materiales indicados (placa Arduino y cables de conexión).',
+    category: 'academic',
+    targetGroup: 'grade',
+    targetGrade: 'Secundaria 1°',
+    attachmentUrl: 'Guia_Laboratorio_Robotica_S1.pdf',
+    deliveryChannels: ['in_app'],
+    createdAt: '2026-05-26T10:00:00Z'
+  },
+  {
+    id: 'msg-3',
+    tenantId: 't-11111111-1111-1111-1111-111111111111',
+    senderId: 'u-auxiliar1',
+    senderName: 'Mariana Rosas',
+    senderRole: 'Oficina de Admisión',
+    subject: 'URGENTE: Proceso de Matrícula Extemporánea 2026',
+    body: 'Se comunica a los padres de familia que el plazo improrrogable para regularizar los expedientes académicos y tramitar las matrículas pendientes de pago vence este fin de semana. Apoderados con vacantes pendientes deben acercarse presencialmente a Sede Central para evitar la reasignación del cupo.',
+    category: 'billing',
+    targetGroup: 'parents',
+    deliveryChannels: ['in_app', 'email', 'whatsapp'],
+    createdAt: '2026-05-27T09:00:00Z'
+  }
+];
+
+export const communicationRecipients: CommunicationRecipient[] = [
+  // Mensaje 1 (A todos, enviamos muestra de destinatarios)
+  {
+    id: 'rc-1',
+    messageId: 'msg-1',
+    recipientId: 'u-prof1',
+    recipientName: 'Alejandro Mendoza',
+    recipientRole: 'teacher',
+    inAppStatus: 'read',
+    emailStatus: 'sent',
+    whatsappStatus: 'not_requested',
+    readAt: '2026-05-25T08:30:00Z',
+    updatedAt: '2026-05-25T08:30:00Z'
+  },
+  {
+    id: 'rc-2',
+    messageId: 'msg-1',
+    recipientId: 'u-auxiliar1',
+    recipientName: 'Mariana Rosas',
+    recipientRole: 'admin',
+    inAppStatus: 'unread',
+    emailStatus: 'sent',
+    whatsappStatus: 'not_requested',
+    updatedAt: '2026-05-25T08:00:00Z'
+  },
+  {
+    id: 'rc-3',
+    messageId: 'msg-1',
+    recipientId: 'u-prof2', // Supongamos otro usuario
+    recipientName: 'Valeria Campos',
+    recipientRole: 'student',
+    inAppStatus: 'unread',
+    emailStatus: 'sent',
+    whatsappStatus: 'not_requested',
+    updatedAt: '2026-05-25T08:00:00Z'
+  },
+
+  // Mensaje 2 (Dirigido a un grado - Secundaria 1°)
+  {
+    id: 'rc-4',
+    messageId: 'msg-2',
+    recipientId: 'u-prof2', // Valeria
+    recipientName: 'Valeria Campos',
+    recipientRole: 'student',
+    inAppStatus: 'unread',
+    emailStatus: 'not_requested',
+    whatsappStatus: 'not_requested',
+    updatedAt: '2026-05-26T10:00:00Z'
+  },
+
+  // Mensaje 3 (Dirigido a padres de familia)
+  {
+    id: 'rc-5',
+    messageId: 'msg-3',
+    recipientId: 'u-admin1', // Dirección recibe copia
+    recipientName: 'Santiago Delgado',
+    recipientRole: 'admin',
+    inAppStatus: 'read',
+    emailStatus: 'sent',
+    whatsappStatus: 'sent',
+    readAt: '2026-05-27T09:15:00Z',
+    updatedAt: '2026-05-27T09:15:00Z'
+  },
+  {
+    id: 'rc-6',
+    messageId: 'msg-3',
+    recipientId: 'u-prof1', // Profesor
+    recipientName: 'Alejandro Mendoza',
+    recipientRole: 'teacher',
+    inAppStatus: 'unread',
+    emailStatus: 'sent',
+    whatsappStatus: 'sent',
+    updatedAt: '2026-05-27T09:00:00Z'
+  }
+];
+
 
 
 
