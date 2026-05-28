@@ -195,7 +195,7 @@ app.post('/api/tenants', authenticateJWT, (req, res) => {
     if (req.user?.roleId !== 'r-superadmin') {
         return res.status(403).json({ error: 'Acceso denegado: Se requieren privilegios de Superadmin' });
     }
-    const { name, subdomain, logoUrl, primaryColor, secondaryColor, status, fiscalId, address, phone, email, domain } = req.body;
+    const { name, subdomain, logoUrl, primaryColor, secondaryColor, status, fiscalId, address, phone, email, domain, country, currency, startDate, endDate, paymentGateway, billingPlan } = req.body;
     if (!name || !subdomain) {
         return res.status(400).json({ error: 'Nombre de escuela y subdominio son obligatorios' });
     }
@@ -217,7 +217,13 @@ app.post('/api/tenants', authenticateJWT, (req, res) => {
         address: address || '',
         phone: phone || '',
         email: email || '',
-        domain: domain || `${subdomain}.sincroedu.edu.pe`
+        domain: domain || `${subdomain}.sincroedu.edu.pe`,
+        country: country || 'Perú',
+        currency: currency || 'PEN',
+        startDate: startDate || new Date().toISOString().split('T')[0],
+        endDate: endDate || null,
+        paymentGateway: paymentGateway || 'culqui',
+        billingPlan: billingPlan || 'membership'
     };
     db_1.tenants.push(newTenant);
     // Auto-creación de roles predeterminados para el nuevo Tenant
@@ -280,7 +286,7 @@ app.put('/api/tenants/:tenantId', authenticateJWT, (req, res) => {
         return res.status(403).json({ error: 'Acceso denegado: Se requieren privilegios de Superadmin' });
     }
     const { tenantId } = req.params;
-    const { name, logoUrl, primaryColor, secondaryColor, status, fiscalId, address, phone, email, domain } = req.body;
+    const { name, logoUrl, primaryColor, secondaryColor, status, fiscalId, address, phone, email, domain, country, currency, startDate, endDate, paymentGateway, billingPlan } = req.body;
     const tenantIdx = db_1.tenants.findIndex(t => t.id === tenantId);
     if (tenantIdx === -1) {
         return res.status(404).json({ error: 'Tenant no encontrado' });
@@ -306,6 +312,18 @@ app.put('/api/tenants/:tenantId', authenticateJWT, (req, res) => {
         db_1.tenants[tenantIdx].email = email;
     if (domain !== undefined)
         db_1.tenants[tenantIdx].domain = domain;
+    if (country !== undefined)
+        db_1.tenants[tenantIdx].country = country;
+    if (currency !== undefined)
+        db_1.tenants[tenantIdx].currency = currency;
+    if (startDate !== undefined)
+        db_1.tenants[tenantIdx].startDate = startDate;
+    if (endDate !== undefined)
+        db_1.tenants[tenantIdx].endDate = endDate;
+    if (paymentGateway !== undefined)
+        db_1.tenants[tenantIdx].paymentGateway = paymentGateway;
+    if (billingPlan !== undefined)
+        db_1.tenants[tenantIdx].billingPlan = billingPlan;
     const updatedTenant = db_1.tenants[tenantIdx];
     // Registrar Auditoría Global
     addAuditLog('system', 'tenants', tenantId, 'UPDATE', req.user?.email || 'superadmin@sincroedu.com', previousTenant, updatedTenant);
@@ -1510,6 +1528,323 @@ app.get('/api/comms/messages/:messageId/delivery', authenticateJWT, (req, res) =
             }
         },
         recipientsList: recs
+    });
+});
+// =====================================================================
+// API 11: MÓDULO DE CALIFICACIONES Y EVALUACIONES (GRADEBOOK MULTI-SCALE)
+// =====================================================================
+// A. Obtener escala activa y calificaciones de un curso
+app.get('/api/tenants/:tenantId/courses/:courseId/grades', authenticateJWT, (req, res) => {
+    const { tenantId, courseId } = req.params;
+    const { academicPeriod = '2026-I' } = req.query;
+    if (req.user?.tenantId && req.user.tenantId !== tenantId) {
+        return res.status(403).json({ error: 'Acceso denegado: Aislamiento Tenant violado' });
+    }
+    // 1. Obtener alumnos matriculados activos en este curso
+    const enrolledStudentIds = db_1.enrollments
+        .filter(e => e.tenantId === tenantId && e.courseId === courseId && e.academicPeriod === academicPeriod && e.status === 'active')
+        .map(e => e.studentId);
+    const courseStudents = db_1.students.filter(s => enrolledStudentIds.includes(s.id));
+    // 2. Obtener estructura de evaluaciones de este curso
+    const courseEvals = db_1.evaluationStructures.filter(es => es.tenantId === tenantId && es.courseId === courseId);
+    // 3. Obtener registros de notas existentes
+    const courseGrades = db_1.gradeRecords.filter(gr => gr.tenantId === tenantId && gr.courseId === courseId && gr.academicPeriod === academicPeriod);
+    // 4. Obtener estado de bloqueo
+    const lock = db_1.periodLocks.find(pl => pl.tenantId === tenantId && pl.courseId === courseId && pl.academicPeriod === academicPeriod);
+    const isLocked = lock ? lock.isLocked : false;
+    // 5. Obtener escala de notas activa (buscamos la vigesimal de este tenant por defecto o la primera disponible)
+    const scale = db_1.gradeScales.find(gs => gs.tenantId === tenantId) || db_1.gradeScales[0];
+    return res.json({
+        students: courseStudents,
+        evaluationStructures: courseEvals,
+        grades: courseGrades,
+        isLocked,
+        scale
+    });
+});
+// B. Registrar ponderación/pesos dinámicos en el curso
+app.put('/api/tenants/:tenantId/courses/:courseId/weights', authenticateJWT, (req, res) => {
+    const { tenantId, courseId } = req.params;
+    const { weights } = req.body; // Array de { id, name, weight }
+    if (req.user?.tenantId && req.user.tenantId !== tenantId) {
+        return res.status(403).json({ error: 'Acceso denegado: Aislamiento Tenant violado' });
+    }
+    // Verificar estado de bloqueo del curso
+    const lock = db_1.periodLocks.find(pl => pl.tenantId === tenantId && pl.courseId === courseId && pl.academicPeriod === '2026-I');
+    if (lock?.isLocked) {
+        return res.status(400).json({ error: 'No se pueden modificar los pesos: El periodo está cerrado y bloqueado.' });
+    }
+    if (!Array.isArray(weights)) {
+        return res.status(400).json({ error: 'Los pesos deben ser un arreglo válido.' });
+    }
+    // Validar que la suma sea 100%
+    const totalSum = weights.reduce((sum, w) => sum + Number(w.weight), 0);
+    if (totalSum !== 100) {
+        return res.status(400).json({ error: `La suma de ponderaciones debe ser exactamente 100%. Suma actual: ${totalSum}%` });
+    }
+    // Eliminar estructuras antiguas y registrar nuevas (o actualizar)
+    const currentStructures = db_1.evaluationStructures.filter(es => es.courseId === courseId && es.tenantId === tenantId);
+    for (let i = db_1.evaluationStructures.length - 1; i >= 0; i--) {
+        if (db_1.evaluationStructures[i].courseId === courseId && db_1.evaluationStructures[i].tenantId === tenantId) {
+            db_1.evaluationStructures.splice(i, 1);
+        }
+    }
+    weights.forEach((w, index) => {
+        db_1.evaluationStructures.push({
+            id: w.id && !w.id.startsWith('new-') ? w.id : `es-${courseId}-${Date.now()}-${index}`,
+            tenantId,
+            courseId,
+            name: w.name,
+            weight: Number(w.weight),
+            createdAt: new Date().toISOString()
+        });
+    });
+    // Registrar Auditoría
+    addAuditLog(tenantId, 'evaluation_structures', courseId, 'UPDATE', req.user?.email || 'profesor@colegiopremium.edu', currentStructures, db_1.evaluationStructures.filter(es => es.courseId === courseId && es.tenantId === tenantId));
+    return res.json({
+        success: true,
+        evaluationStructures: db_1.evaluationStructures.filter(es => es.courseId === courseId && es.tenantId === tenantId)
+    });
+});
+// C. Carga masiva de notas con auditoría y transacciones simuladas seguras
+app.post('/api/tenants/:tenantId/courses/:courseId/grades/bulk', authenticateJWT, (req, res) => {
+    const { tenantId, courseId } = req.params;
+    const { grades, reason, academicPeriod = '2026-I' } = req.body;
+    if (req.user?.tenantId && req.user.tenantId !== tenantId) {
+        return res.status(403).json({ error: 'Acceso denegado: Aislamiento Tenant violado' });
+    }
+    // 1. Validar bloqueo
+    const lock = db_1.periodLocks.find(pl => pl.tenantId === tenantId && pl.courseId === courseId && pl.academicPeriod === academicPeriod);
+    if (lock?.isLocked) {
+        return res.status(400).json({ error: 'No se pueden registrar notas: El periodo escolar ha sido cerrado y bloqueado por la dirección.' });
+    }
+    if (!Array.isArray(grades) || grades.length === 0) {
+        return res.status(400).json({ error: 'Se requiere una lista de calificaciones válida.' });
+    }
+    if (!reason || reason.trim().length === 0) {
+        return res.status(400).json({ error: 'Por motivos de auditoría y seguridad EdTech, es obligatorio especificar una justificación para guardar notas.' });
+    }
+    // 2. Procesar transaccionalmente (en memoria) cada nota
+    const updatedCount = { created: 0, updated: 0 };
+    const userEmail = req.user?.email || 'profesor@colegiopremium.edu';
+    grades.forEach((g) => {
+        const { studentId, evaluationStructureId, value, letter, comment } = g;
+        // Buscar si ya existe
+        const gradeIdx = db_1.gradeRecords.findIndex(gr => gr.tenantId === tenantId &&
+            gr.studentId === studentId &&
+            gr.courseId === courseId &&
+            gr.evaluationStructureId === evaluationStructureId &&
+            gr.academicPeriod === academicPeriod);
+        const previousValue = gradeIdx !== -1 ? db_1.gradeRecords[gradeIdx].value : null;
+        const previousLetter = gradeIdx !== -1 ? db_1.gradeRecords[gradeIdx].letter || null : null;
+        if (gradeIdx !== -1) {
+            // Modificar existente
+            db_1.gradeRecords[gradeIdx].value = Number(value);
+            db_1.gradeRecords[gradeIdx].letter = letter || undefined;
+            db_1.gradeRecords[gradeIdx].comment = comment || undefined;
+            db_1.gradeRecords[gradeIdx].updatedAt = new Date().toISOString();
+            db_1.gradeRecords[gradeIdx].createdBy = userEmail;
+            updatedCount.updated++;
+        }
+        else {
+            // Registrar nueva
+            db_1.gradeRecords.push({
+                id: `gr-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+                tenantId,
+                studentId,
+                courseId,
+                evaluationStructureId,
+                academicPeriod,
+                value: Number(value),
+                letter: letter || undefined,
+                comment: comment || undefined,
+                createdBy: userEmail,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            });
+            updatedCount.created++;
+        }
+        // Registrar en la Bitácora de Auditoría si hubo cambio o creación
+        if (previousValue !== Number(value) || previousLetter !== (letter || null)) {
+            db_1.gradeAuditLogs.unshift({
+                id: `gal-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+                tenantId,
+                courseId,
+                studentId,
+                evaluationStructureId,
+                academicPeriod,
+                previousValue,
+                previousLetter,
+                newValue: Number(value),
+                newLetter: letter || null,
+                changedBy: userEmail,
+                reason,
+                createdAt: new Date().toISOString()
+            });
+        }
+    });
+    return res.json({
+        success: true,
+        message: `Sincronización masiva de calificaciones exitosa. Notas creadas: ${updatedCount.created}, actualizadas: ${updatedCount.updated}.`,
+        counts: updatedCount
+    });
+});
+// D. Obtener bitácora de auditoría de un curso
+app.get('/api/tenants/:tenantId/courses/:courseId/grades/audit', authenticateJWT, (req, res) => {
+    const { tenantId, courseId } = req.params;
+    const { academicPeriod = '2026-I' } = req.query;
+    if (req.user?.tenantId && req.user.tenantId !== tenantId) {
+        return res.status(403).json({ error: 'Acceso denegado: Aislamiento Tenant violado' });
+    }
+    const history = db_1.gradeAuditLogs
+        .filter(log => log.tenantId === tenantId && log.courseId === courseId && log.academicPeriod === academicPeriod)
+        .map(log => {
+        const linkedStudent = db_1.students.find(s => s.id === log.studentId);
+        const linkedEval = db_1.evaluationStructures.find(es => es.id === log.evaluationStructureId);
+        return {
+            ...log,
+            studentName: linkedStudent ? `${linkedStudent.firstName} ${linkedStudent.lastName}` : 'Alumno desconocido',
+            evaluationName: linkedEval ? linkedEval.name : 'Evaluación'
+        };
+    });
+    return res.json(history);
+});
+// E. Bloquear/Cerrar periodo escolar para un curso
+app.post('/api/tenants/:tenantId/courses/:courseId/lock', authenticateJWT, (req, res) => {
+    const { tenantId, courseId } = req.params;
+    const { isLocked, academicPeriod = '2026-I' } = req.body;
+    if (req.user?.tenantId && req.user.tenantId !== tenantId) {
+        return res.status(403).json({ error: 'Acceso denegado: Aislamiento Tenant violado' });
+    }
+    const lockIdx = db_1.periodLocks.findIndex(pl => pl.tenantId === tenantId && pl.courseId === courseId && pl.academicPeriod === academicPeriod);
+    const userEmail = req.user?.email || 'admin@colegiopremium.edu';
+    if (lockIdx !== -1) {
+        db_1.periodLocks[lockIdx].isLocked = !!isLocked;
+        db_1.periodLocks[lockIdx].lockedBy = userEmail;
+        db_1.periodLocks[lockIdx].lockedAt = new Date().toISOString();
+    }
+    else {
+        db_1.periodLocks.push({
+            id: `pl-${Date.now()}`,
+            tenantId,
+            academicPeriod,
+            courseId,
+            isLocked: !!isLocked,
+            lockedBy: userEmail,
+            lockedAt: new Date().toISOString()
+        });
+    }
+    // Registrar Auditoría
+    addAuditLog(tenantId, 'period_locks', courseId, isLocked ? 'STATUS_CHANGE' : 'UPDATE', userEmail, { isLocked: !isLocked }, { isLocked });
+    return res.json({
+        success: true,
+        isLocked: !!isLocked,
+        message: isLocked
+            ? 'El periodo escolar para esta asignatura ha sido cerrado. Las calificaciones han sido bloqueadas y se han emitido las libretas oficiales.'
+            : 'El periodo escolar ha sido desbloqueado. Se permiten ediciones de calificaciones.'
+    });
+});
+// F. Obtener Libreta de Notas consolidadas del alumno (PDF / Formato web premium)
+app.get('/api/tenants/:tenantId/students/:studentId/report-card', authenticateJWT, (req, res) => {
+    const { tenantId, studentId } = req.params;
+    const { academicPeriod = '2026-I' } = req.query;
+    if (req.user?.tenantId && req.user.tenantId !== tenantId) {
+        return res.status(403).json({ error: 'Acceso denegado: Aislamiento Tenant violado' });
+    }
+    // 1. Obtener detalles del estudiante
+    const student = db_1.students.find(s => s.id === studentId && s.tenantId === tenantId);
+    if (!student) {
+        return res.status(404).json({ error: 'Estudiante no encontrado en la institución.' });
+    }
+    // 2. Obtener matrículas (cursos en los que está inscrito el alumno en este periodo)
+    const studentEnrollments = db_1.enrollments.filter(e => e.studentId === studentId &&
+        e.tenantId === tenantId &&
+        e.academicPeriod === academicPeriod &&
+        (e.status === 'active' || e.status === 'completed'));
+    // 3. Para cada curso, calcular notas y promedio ponderado
+    const courseAverages = studentEnrollments.map(enr => {
+        const course = db_1.courses.find(c => c.id === enr.courseId);
+        // Obtener estructuras y notas de este curso
+        const courseEvals = db_1.evaluationStructures.filter(es => es.courseId === enr.courseId);
+        const courseGrades = db_1.gradeRecords.filter(gr => gr.studentId === studentId &&
+            gr.courseId === enr.courseId &&
+            gr.academicPeriod === academicPeriod);
+        // Calcular el promedio ponderado en base al valor numérico
+        let weightedSum = 0;
+        let weightTotalUsed = 0;
+        const gradesBreakdown = courseEvals.map(evalStruct => {
+            const grade = courseGrades.find(g => g.evaluationStructureId === evalStruct.id);
+            const val = grade ? grade.value : 0;
+            if (grade) {
+                weightedSum += val * (evalStruct.weight / 100);
+                weightTotalUsed += evalStruct.weight;
+            }
+            return {
+                evaluationName: evalStruct.name,
+                weight: evalStruct.weight,
+                value: grade ? val : '-',
+                letter: grade ? grade.letter || null : null,
+                comment: grade ? grade.comment || null : null
+            };
+        });
+        const averageValue = weightTotalUsed > 0 ? parseFloat((weightedSum * (100 / weightTotalUsed)).toFixed(2)) : 0;
+        // Mapear promedio a letra o competencia en base a la escala vigesimal o por competencias
+        let averageLetter = '-';
+        let averageGpa = 0.0;
+        // Lógica del motor de reglas de escala
+        if (averageValue >= 17) {
+            averageLetter = 'AD';
+            averageGpa = 4.0;
+        }
+        else if (averageValue >= 14) {
+            averageLetter = 'A';
+            averageGpa = 3.5;
+        }
+        else if (averageValue >= 11) {
+            averageLetter = 'B';
+            averageGpa = 2.5;
+        }
+        else if (averageValue > 0) {
+            averageLetter = 'C';
+            averageGpa = 1.0;
+        }
+        return {
+            courseId: enr.courseId,
+            courseCode: course ? course.code : 'COD',
+            courseName: course ? course.name : 'Curso desconocido',
+            credits: course ? course.credits : 0,
+            grades: gradesBreakdown,
+            average: averageValue,
+            averageLetter,
+            averageGpa
+        };
+    });
+    // 4. Calcular GPA final consolidado del alumno en este periodo
+    const gradedCourses = courseAverages.filter(c => c.average > 0);
+    const totalCredits = gradedCourses.reduce((sum, c) => sum + c.credits, 0);
+    const weightedGpaSum = gradedCourses.reduce((sum, c) => sum + (c.averageGpa * c.credits), 0);
+    const cumulativeGpa = totalCredits > 0 ? parseFloat((weightedGpaSum / totalCredits).toFixed(2)) : 0.0;
+    // 5. Obtener institución
+    const tenant = db_1.tenants.find(t => t.id === tenantId);
+    return res.json({
+        student: {
+            id: student.id,
+            enrollmentNumber: student.enrollmentNumber,
+            documentId: student.documentId,
+            firstName: student.firstName,
+            lastName: student.lastName,
+            email: student.email
+        },
+        tenant: tenant ? {
+            name: tenant.name,
+            logoUrl: tenant.logoUrl,
+            address: tenant.address,
+            phone: tenant.phone
+        } : null,
+        academicPeriod,
+        courseAverages,
+        cumulativeGpa,
+        totalCredits
     });
 });
 // INICIAR SERVIDOR

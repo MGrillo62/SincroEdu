@@ -13,6 +13,12 @@ export interface Tenant {
   phone?: string;
   email?: string;
   domain?: string;
+  country?: string;
+  currency?: string;
+  startDate?: string;
+  endDate?: string | null;
+  paymentGateway?: 'stripe' | 'culqui' | 'conekta';
+  billingPlan?: 'membership';
 }
 
 export interface MenuOption {
@@ -153,7 +159,13 @@ export const tenants: Tenant[] = [
     address: 'Av. Aurelio Miró Quesada 450, San Isidro, Lima',
     phone: '+51 1 615-5800',
     email: 'contacto@colegiopremium.edu',
-    domain: 'colegiopremium.edu'
+    domain: 'colegiopremium.edu',
+    country: 'Perú',
+    currency: 'PEN',
+    startDate: '2026-01-15',
+    endDate: null,
+    paymentGateway: 'culqui',
+    billingPlan: 'membership'
   },
   {
     id: 't-22222222-2222-2222-2222-222222222222',
@@ -167,7 +179,13 @@ export const tenants: Tenant[] = [
     address: 'Calle Monterrey 340, Santiago de Surco, Lima',
     phone: '+51 1 712-4000',
     email: 'admision@ciencias.edu.pe',
-    domain: 'ciencias.edu.pe'
+    domain: 'ciencias.edu.pe',
+    country: 'México',
+    currency: 'MXN',
+    startDate: '2026-02-01',
+    endDate: null,
+    paymentGateway: 'conekta',
+    billingPlan: 'membership'
   }
 ];
 
@@ -176,15 +194,15 @@ export const menuOptions: MenuOption[] = [
   { id: 'm-10', parentId: null, title: 'CRM y Leads', icon: 'Target', route: '/dashboard/crm', sortOrder: 2, module: 'crm', isActive: true },
   { id: 'm-4', parentId: null, title: 'Sedes', icon: 'MapPin', route: '/dashboard/campuses', sortOrder: 3, module: 'sedes', isActive: true },
   { id: 'm-5', parentId: null, title: 'Alumnos', icon: 'FileText', route: '/dashboard/students', sortOrder: 4, module: 'matriculas', isActive: true },
-  { id: 'm-6', parentId: null, title: 'Calificaciones Académicas', icon: 'Award', route: '/dashboard/grades', sortOrder: 5, module: 'calificaciones', isActive: true },
+  { id: 'm-6', parentId: null, title: 'Calificaciones', icon: 'Award', route: '/dashboard/grades', sortOrder: 5, module: 'calificaciones', isActive: true },
   { id: 'm-7', parentId: null, title: 'Pagos y cobros', icon: 'CreditCard', route: '/dashboard/payments', sortOrder: 6, module: 'pagos', isActive: true },
   { id: 'm-8', parentId: null, title: 'Programación predictiva', icon: 'CalendarDays', route: '/dashboard/predictive', sortOrder: 7, module: 'predicciones', isActive: true },
   { id: 'm-9', parentId: null, title: 'Centro de Comunicación', icon: 'MessageSquare', route: '/dashboard/comms', sortOrder: 8, module: 'comunicaciones', isActive: true },
   { id: 'm-11', parentId: null, title: 'Herramientas Administrativas', icon: 'ShieldAlert', route: '/dashboard/admin', sortOrder: 9, module: 'administracion', isActive: true },
   { id: 'm-config', parentId: null, title: 'Configuración', icon: 'Settings', route: '/dashboard/config', sortOrder: 10, module: 'config', isActive: true },
-  { id: 'm-config-roles', parentId: 'm-config', title: 'Matriz de Roles Dinámicos', icon: 'Shield', route: '/dashboard/config/roles', sortOrder: 1, module: 'config', isActive: true },
-  { id: 'm-2', parentId: 'm-config', title: 'Catálogo de Cursos y Oferta', icon: 'BookOpen', route: '/dashboard/courses', sortOrder: 2, module: 'cursos', isActive: true },
-  { id: 'm-3', parentId: 'm-config', title: 'Gestión de Facultad (Profesores)', icon: 'Users', route: '/dashboard/professors', sortOrder: 3, module: 'facultad', isActive: true },
+  { id: 'm-config-roles', parentId: 'm-config', title: 'Roles', icon: 'Shield', route: '/dashboard/config/roles', sortOrder: 1, module: 'config', isActive: true },
+  { id: 'm-2', parentId: 'm-config', title: 'Catálogo de cursos', icon: 'BookOpen', route: '/dashboard/courses', sortOrder: 2, module: 'cursos', isActive: true },
+  { id: 'm-3', parentId: 'm-config', title: 'Profesores', icon: 'Users', route: '/dashboard/professors', sortOrder: 3, module: 'facultad', isActive: true },
   { id: 'm-tenants', parentId: null, title: 'Configuración de Tenants', icon: 'Globe', route: '/dashboard/tenants', sortOrder: 11, module: 'tenants', isActive: true }
 ];
 
@@ -1116,6 +1134,334 @@ export const communicationRecipients: CommunicationRecipient[] = [
     updatedAt: '2026-05-27T09:00:00Z'
   }
 ];
+
+// =====================================================================
+// MODELOS Y SEMILLAS DE CALIFICACIONES Y EVALUACIONES (FASE 4)
+// =====================================================================
+
+export interface GradeScale {
+  id: string;
+  tenantId: string;
+  name: string;
+  type: 'numeric-20' | 'numeric-100' | 'letter' | 'competency';
+  minGrade: number;
+  maxGrade: number;
+  passingGrade: number;
+}
+
+export interface EvaluationStructure {
+  id: string;
+  tenantId: string;
+  courseId: string;
+  name: string; // ej: 'Exámenes', 'Tareas', 'Talleres'
+  weight: number; // Porcentaje, ej: 50 (representa 50%)
+  createdAt: string;
+}
+
+export interface GradeRecord {
+  id: string;
+  tenantId: string;
+  studentId: string;
+  courseId: string;
+  evaluationStructureId: string; // Vínculo al tipo de evaluación
+  academicPeriod: string; // ej: '2026-I'
+  value: number; // Siempre guardamos valor numérico (0-100 o 0-20), en letras guardamos su mapeo
+  letter?: string; // Mapeo de letra o competencia (ej: 'A', 'AD')
+  comment?: string; // Comentarios opcionales
+  createdBy: string; // Quién registró la nota (profesor@colegiopremium.edu)
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PeriodLock {
+  id: string;
+  tenantId: string;
+  academicPeriod: string;
+  courseId: string;
+  isLocked: boolean;
+  lockedBy?: string;
+  lockedAt?: string;
+}
+
+export interface GradeAuditLog {
+  id: string;
+  tenantId: string;
+  courseId: string;
+  studentId: string;
+  evaluationStructureId: string;
+  academicPeriod: string;
+  previousValue: number | null;
+  previousLetter: string | null;
+  newValue: number;
+  newLetter: string | null;
+  changedBy: string;
+  reason: string;
+  createdAt: string;
+}
+
+// -------------------------------------------------------------
+// SEMILLAS DE DATOS DE CALIFICACIONES
+// -------------------------------------------------------------
+
+export const gradeScales: GradeScale[] = [
+  {
+    id: 'gs-t1-1',
+    tenantId: 't-11111111-1111-1111-1111-111111111111',
+    name: 'Vigesimal (0-20) - Tradicional Perú',
+    type: 'numeric-20',
+    minGrade: 0,
+    maxGrade: 20,
+    passingGrade: 11
+  },
+  {
+    id: 'gs-t1-2',
+    tenantId: 't-11111111-1111-1111-1111-111111111111',
+    name: 'Escala de Competencias (AD, A, B, C) - CNEB Perú',
+    type: 'competency',
+    minGrade: 0,
+    maxGrade: 4,
+    passingGrade: 2 // 'B' es aprobatorio básico
+  },
+  {
+    id: 'gs-t2-1',
+    tenantId: 't-22222222-2222-2222-2222-222222222222',
+    name: 'Escala Centesimal (0-100) - México',
+    type: 'numeric-100',
+    minGrade: 0,
+    maxGrade: 100,
+    passingGrade: 60
+  }
+];
+
+// Estructura de evaluaciones predeterminadas
+export const evaluationStructures: EvaluationStructure[] = [
+  // Curso 1 (Álgebra) -> Exámenes 50%, Tareas 30%, Proyectos 20%
+  {
+    id: 'es-c1-exam',
+    tenantId: 't-11111111-1111-1111-1111-111111111111',
+    courseId: 'c-1',
+    name: 'Exámenes Mensuales',
+    weight: 50,
+    createdAt: '2026-03-01T08:00:00Z'
+  },
+  {
+    id: 'es-c1-homework',
+    tenantId: 't-11111111-1111-1111-1111-111111111111',
+    courseId: 'c-1',
+    name: 'Tareas y Prácticas',
+    weight: 30,
+    createdAt: '2026-03-01T08:00:00Z'
+  },
+  {
+    id: 'es-c1-project',
+    tenantId: 't-11111111-1111-1111-1111-111111111111',
+    courseId: 'c-1',
+    name: 'Proyecto de Álgebra Aplicada',
+    weight: 20,
+    createdAt: '2026-03-01T08:00:00Z'
+  },
+
+  // Curso 2 (Literatura) -> Redacción 40%, Lecturas 40%, Participación 20%
+  {
+    id: 'es-c2-writing',
+    tenantId: 't-11111111-1111-1111-1111-111111111111',
+    courseId: 'c-2',
+    name: 'Redacción y Ensayos',
+    weight: 40,
+    createdAt: '2026-03-01T08:00:00Z'
+  },
+  {
+    id: 'es-c2-reading',
+    tenantId: 't-11111111-1111-1111-1111-111111111111',
+    courseId: 'c-2',
+    name: 'Fichas de Lectura',
+    weight: 40,
+    createdAt: '2026-03-01T08:00:00Z'
+  },
+  {
+    id: 'es-c2-part',
+    tenantId: 't-11111111-1111-1111-1111-111111111111',
+    courseId: 'c-2',
+    name: 'Debate y Participación',
+    weight: 20,
+    createdAt: '2026-03-01T08:00:00Z'
+  }
+];
+
+// Calificaciones ingresadas (Semillas iniciales)
+export const gradeRecords: GradeRecord[] = [
+  // Álgebra (c-1) - Alejandro Mendoza (st-1) -> Exámenes 16, Tareas 18, Proyecto 17 -> Promedio ponderado: 16.8
+  {
+    id: 'gr-1',
+    tenantId: 't-11111111-1111-1111-1111-111111111111',
+    studentId: 'st-1',
+    courseId: 'c-1',
+    evaluationStructureId: 'es-c1-exam',
+    academicPeriod: '2026-I',
+    value: 16,
+    createdBy: 'profesor@colegiopremium.edu',
+    createdAt: '2026-04-15T10:00:00Z',
+    updatedAt: '2026-04-15T10:00:00Z'
+  },
+  {
+    id: 'gr-2',
+    tenantId: 't-11111111-1111-1111-1111-111111111111',
+    studentId: 'st-1',
+    courseId: 'c-1',
+    evaluationStructureId: 'es-c1-homework',
+    academicPeriod: '2026-I',
+    value: 18,
+    createdBy: 'profesor@colegiopremium.edu',
+    createdAt: '2026-04-20T11:00:00Z',
+    updatedAt: '2026-04-20T11:00:00Z'
+  },
+  {
+    id: 'gr-3',
+    tenantId: 't-11111111-1111-1111-1111-111111111111',
+    studentId: 'st-1',
+    courseId: 'c-1',
+    evaluationStructureId: 'es-c1-project',
+    academicPeriod: '2026-I',
+    value: 17,
+    comment: 'Trabajo excepcional de modelación trigonométrica de órbitas.',
+    createdBy: 'profesor@colegiopremium.edu',
+    createdAt: '2026-05-10T09:30:00Z',
+    updatedAt: '2026-05-10T09:30:00Z'
+  },
+
+  // Álgebra (c-1) - Valeria Campos (st-2) -> Exámenes 14, Tareas 12, Proyecto 15 -> Promedio: 13.6
+  {
+    id: 'gr-4',
+    tenantId: 't-11111111-1111-1111-1111-111111111111',
+    studentId: 'st-2',
+    courseId: 'c-1',
+    evaluationStructureId: 'es-c1-exam',
+    academicPeriod: '2026-I',
+    value: 14,
+    createdBy: 'profesor@colegiopremium.edu',
+    createdAt: '2026-04-15T10:15:00Z',
+    updatedAt: '2026-04-15T10:15:00Z'
+  },
+  {
+    id: 'gr-5',
+    tenantId: 't-11111111-1111-1111-1111-111111111111',
+    studentId: 'st-2',
+    courseId: 'c-1',
+    evaluationStructureId: 'es-c1-homework',
+    academicPeriod: '2026-I',
+    value: 12,
+    createdBy: 'profesor@colegiopremium.edu',
+    createdAt: '2026-04-20T11:20:00Z',
+    updatedAt: '2026-04-20T11:20:00Z'
+  },
+  {
+    id: 'gr-6',
+    tenantId: 't-11111111-1111-1111-1111-111111111111',
+    studentId: 'st-2',
+    courseId: 'c-1',
+    evaluationStructureId: 'es-c1-project',
+    academicPeriod: '2026-I',
+    value: 15,
+    createdBy: 'profesor@colegiopremium.edu',
+    createdAt: '2026-05-10T09:45:00Z',
+    updatedAt: '2026-05-10T09:45:00Z'
+  },
+
+  // Literatura (c-2) - Alejandro Mendoza (st-1) -> Redacción 18 (AD), Lecturas 16 (A), Participación 19 (AD)
+  {
+    id: 'gr-7',
+    tenantId: 't-11111111-1111-1111-1111-111111111111',
+    studentId: 'st-1',
+    courseId: 'c-2',
+    evaluationStructureId: 'es-c2-writing',
+    academicPeriod: '2026-I',
+    value: 18,
+    letter: 'AD',
+    createdBy: 'profesor@colegiopremium.edu',
+    createdAt: '2026-04-18T16:00:00Z',
+    updatedAt: '2026-04-18T16:00:00Z'
+  },
+  {
+    id: 'gr-8',
+    tenantId: 't-11111111-1111-1111-1111-111111111111',
+    studentId: 'st-1',
+    courseId: 'c-2',
+    evaluationStructureId: 'es-c2-reading',
+    academicPeriod: '2026-I',
+    value: 16,
+    letter: 'A',
+    createdBy: 'profesor@colegiopremium.edu',
+    createdAt: '2026-04-25T14:30:00Z',
+    updatedAt: '2026-04-25T14:30:00Z'
+  },
+  {
+    id: 'gr-9',
+    tenantId: 't-11111111-1111-1111-1111-111111111111',
+    studentId: 'st-1',
+    courseId: 'c-2',
+    evaluationStructureId: 'es-c2-part',
+    academicPeriod: '2026-I',
+    value: 19,
+    letter: 'AD',
+    comment: 'Participación analítica sobresaliente en foros de poesía contemporánea.',
+    createdBy: 'profesor@colegiopremium.edu',
+    createdAt: '2026-05-15T11:00:00Z',
+    updatedAt: '2026-05-15T11:00:00Z'
+  }
+];
+
+// Control de bloqueos/cierres de periodo por curso
+export const periodLocks: PeriodLock[] = [
+  {
+    id: 'pl-1',
+    tenantId: 't-11111111-1111-1111-1111-111111111111',
+    academicPeriod: '2026-I',
+    courseId: 'c-1',
+    isLocked: false
+  },
+  {
+    id: 'pl-2',
+    tenantId: 't-11111111-1111-1111-1111-111111111111',
+    academicPeriod: '2026-I',
+    courseId: 'c-2',
+    isLocked: false
+  }
+];
+
+// Bitácora de Auditoría para cambios de notas
+export const gradeAuditLogs: GradeAuditLog[] = [
+  {
+    id: 'gal-1',
+    tenantId: 't-11111111-1111-1111-1111-111111111111',
+    courseId: 'c-1',
+    studentId: 'st-1',
+    evaluationStructureId: 'es-c1-homework',
+    academicPeriod: '2026-I',
+    previousValue: null,
+    previousLetter: null,
+    newValue: 18,
+    newLetter: null,
+    changedBy: 'profesor@colegiopremium.edu',
+    reason: 'Carga inicial de notas bimestrales de cuadernos.',
+    createdAt: '2026-04-20T11:00:00Z'
+  },
+  {
+    id: 'gal-2',
+    tenantId: 't-11111111-1111-1111-1111-111111111111',
+    courseId: 'c-1',
+    studentId: 'st-1',
+    evaluationStructureId: 'es-c1-exam',
+    academicPeriod: '2026-I',
+    previousValue: 14,
+    previousLetter: null,
+    newValue: 16,
+    newLetter: null,
+    changedBy: 'profesor@colegiopremium.edu',
+    reason: 'Corrección de error de digitación en pregunta 4 del examen final.',
+    createdAt: '2026-05-18T10:00:00Z'
+  }
+];
+
 
 
 

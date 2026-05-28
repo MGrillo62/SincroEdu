@@ -46,6 +46,12 @@ async function initDatabase() {
         primary_color VARCHAR(10) DEFAULT '#6B8E4E',
         secondary_color VARCHAR(10) DEFAULT '#1C2C35',
         status VARCHAR(50) DEFAULT 'active' CHECK (status IN ('active', 'suspended', 'trial')),
+        country VARCHAR(100),
+        currency VARCHAR(10),
+        start_date DATE,
+        end_date DATE,
+        payment_gateway VARCHAR(50),
+        billing_plan VARCHAR(50),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
@@ -178,9 +184,9 @@ async function initDatabase() {
     const tenant2Id = 'bb820465-b778-43d9-a723-f390035cb3c8';
     
     await client.query(`
-      INSERT INTO tenants (id, name, subdomain, logo_url, primary_color, secondary_color, status) VALUES
-      ('${tenant1Id}', 'SincroEdu Premium College', 'sincroedu-college', '/brand/logo.png', '#6B8E4E', '#1C2C35', 'active'),
-      ('${tenant2Id}', 'Instituto de Ciencias Innovación', 'ciencias-innovacion', NULL, '#2B6CB0', '#1A202C', 'active');
+      INSERT INTO tenants (id, name, subdomain, logo_url, primary_color, secondary_color, status, country, currency, start_date, end_date, payment_gateway, billing_plan) VALUES
+      ('${tenant1Id}', 'SincroEdu Premium College', 'sincroedu-college', '/brand/logo.png', '#6B8E4E', '#1C2C35', 'active', 'Perú', 'PEN', '2026-01-15', NULL, 'culqui', 'membership'),
+      ('${tenant2Id}', 'Instituto de Ciencias Innovación', 'ciencias-innovacion', NULL, '#2B6CB0', '#1A202C', 'active', 'México', 'MXN', '2026-02-01', NULL, 'conekta', 'membership');
     `);
     console.log(' - Tenants insertados.');
 
@@ -188,11 +194,11 @@ async function initDatabase() {
     await client.query(`
       INSERT INTO menu_options (id, parent_id, title, icon, route, sort_order, module, is_active) VALUES
       ('m-1', NULL, 'KPIs', 'LayoutDashboard', '/dashboard', 1, 'dashboard', TRUE),
-      ('m-2', NULL, 'Catálogo de Cursos y Oferta', 'BookOpen', '/dashboard/courses', 2, 'cursos', TRUE),
-      ('m-3', NULL, 'Gestión de Facultad (Profesores)', 'Users', '/dashboard/professors', 3, 'facultad', TRUE),
+      ('m-2', NULL, 'Catálogo de cursos', 'BookOpen', '/dashboard/courses', 2, 'cursos', TRUE),
+      ('m-3', NULL, 'Profesores', 'Users', '/dashboard/professors', 3, 'facultad', TRUE),
       ('m-4', NULL, 'Sedes', 'MapPin', '/dashboard/campuses', 4, 'sedes', TRUE),
       ('m-5', NULL, 'Alumnos', 'FileText', '/dashboard/students', 5, 'matriculas', TRUE),
-      ('m-6', NULL, 'Calificaciones Académicas', 'Award', '/dashboard/grades', 6, 'calificaciones', TRUE),
+      ('m-6', NULL, 'Calificaciones', 'Award', '/dashboard/grades', 6, 'calificaciones', TRUE),
       ('m-7', NULL, 'Pagos y cobros', 'CreditCard', '/dashboard/payments', 7, 'pagos', TRUE),
       ('m-8', NULL, 'Programación predictiva', 'CalendarDays', '/dashboard/predictive', 8, 'predicciones', TRUE),
       ('m-9', NULL, 'Centro de Comunicación', 'MessageSquare', '/dashboard/comms', 9, 'comunicaciones', TRUE),

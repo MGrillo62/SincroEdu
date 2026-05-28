@@ -40,6 +40,12 @@ interface Tenant {
   phone?: string;
   email?: string;
   domain?: string;
+  country?: string;
+  currency?: string;
+  startDate?: string;
+  endDate?: string | null;
+  paymentGateway?: 'stripe' | 'culqui' | 'conekta';
+  billingPlan?: 'membership';
 }
 
 interface Campus {
@@ -83,6 +89,12 @@ export default function TenantsPage() {
   const [tenantDomain, setTenantDomain] = useState('');
   const [tenantPrimaryColor, setTenantPrimaryColor] = useState('#6B8E4E');
   const [tenantStatus, setTenantStatus] = useState<'active' | 'suspended' | 'trial'>('active');
+  const [tenantCountry, setTenantCountry] = useState('Perú');
+  const [tenantCurrency, setTenantCurrency] = useState('PEN');
+  const [tenantStartDate, setTenantStartDate] = useState('');
+  const [tenantEndDate, setTenantEndDate] = useState('');
+  const [tenantPaymentGateway, setTenantPaymentGateway] = useState<'stripe' | 'culqui' | 'conekta'>('culqui');
+  const [tenantBillingPlan, setTenantBillingPlan] = useState<'membership'>('membership');
 
   // Geolocalización y Asistente de Mapas
   const [addressQuery, setAddressQuery] = useState('');
@@ -169,6 +181,12 @@ export default function TenantsPage() {
     setTenantDomain('');
     setTenantPrimaryColor('#6B8E4E');
     setTenantStatus('active');
+    setTenantCountry('Perú');
+    setTenantCurrency('PEN');
+    setTenantStartDate(new Date().toISOString().split('T')[0]);
+    setTenantEndDate('');
+    setTenantPaymentGateway('culqui');
+    setTenantBillingPlan('membership');
     setMapCenter({ lat: -12.0945, lng: -77.0321 });
     setSelectedPresetLabel('Ubicación Referencial');
     setIsFormOpen(true);
@@ -187,6 +205,12 @@ export default function TenantsPage() {
     setTenantDomain(tenant.domain || '');
     setTenantPrimaryColor(tenant.primaryColor);
     setTenantStatus(tenant.status);
+    setTenantCountry(tenant.country || 'Perú');
+    setTenantCurrency(tenant.currency || 'PEN');
+    setTenantStartDate(tenant.startDate || '');
+    setTenantEndDate(tenant.endDate || '');
+    setTenantPaymentGateway(tenant.paymentGateway || 'culqui');
+    setTenantBillingPlan(tenant.billingPlan || 'membership');
 
     // Buscar si corresponde a una dirección precargada para centrar el mapa
     const matchingPreset = PRESET_ADDRESSES.find(preset => preset.text === tenant.address);
@@ -220,7 +244,13 @@ export default function TenantsPage() {
       domain: tenantDomain || `${tenantSubdomain}.sincroedu.edu.pe`,
       primaryColor: tenantPrimaryColor,
       secondaryColor: '#1C2C35',
-      status: tenantStatus
+      status: tenantStatus,
+      country: tenantCountry,
+      currency: tenantCurrency,
+      startDate: tenantStartDate,
+      endDate: tenantEndDate || null,
+      paymentGateway: tenantPaymentGateway,
+      billingPlan: tenantBillingPlan
     };
 
     try {
@@ -384,6 +414,28 @@ export default function TenantsPage() {
           <Globe className="w-3.5 h-3.5" />
           {row.domain || '-'}
         </a>
+      )
+    },
+    {
+      accessor: 'country',
+      label: 'Facturación / Pasarela',
+      render: (row) => (
+        <div className="flex flex-col text-[11px] space-y-0.5">
+          <span className="text-slate-800 font-extrabold flex items-center gap-1">
+            {row.country === 'Perú' ? '🇵🇪 Perú' : row.country === 'México' ? '🇲🇽 México' : row.country === 'EEUU' ? '🇺🇸 EEUU' : '🌐 Otros'}
+            <span className="text-slate-400 font-medium font-mono">({row.currency || 'USD'})</span>
+          </span>
+          <span className="text-slate-500 font-medium flex items-center gap-1.5 uppercase text-[9px]">
+            <span className={`px-1.5 py-0.2 rounded font-black text-[9px] ${
+              row.paymentGateway === 'stripe' ? 'bg-indigo-50 text-indigo-700' :
+              row.paymentGateway === 'culqui' ? 'bg-emerald-50 text-emerald-700' :
+              'bg-amber-50 text-amber-700'
+            }`}>
+              {row.paymentGateway || 'stripe'}
+            </span>
+            <span>Membresía</span>
+          </span>
+        </div>
       )
     },
     {
@@ -659,6 +711,103 @@ export default function TenantsPage() {
                         <option value="trial">Periodo de Prueba</option>
                         <option value="suspended">Suspendido / Inactivo</option>
                       </select>
+                    </div>
+                  </div>
+
+                  {/* 3. FACTURACIÓN Y PASARELAS DE PAGO POR PAÍS */}
+                  <h4 className="text-xs font-black text-[#6B8E4E] uppercase tracking-wider border-b border-slate-100 pb-1.5 pt-4 flex items-center gap-1.5">
+                    <Globe className="w-4 h-4" />
+                    3. Licencia por Uso y Facturación (Membresía)
+                  </h4>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black uppercase text-slate-450 tracking-wider">País de Operación</label>
+                      <select
+                        value={tenantCountry}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setTenantCountry(val);
+                          if (val === 'Perú') {
+                            setTenantCurrency('PEN');
+                            setTenantPaymentGateway('culqui');
+                          } else if (val === 'México') {
+                            setTenantCurrency('MXN');
+                            setTenantPaymentGateway('conekta');
+                          } else if (val === 'EEUU') {
+                            setTenantCurrency('USD');
+                            setTenantPaymentGateway('stripe');
+                          } else {
+                            setTenantCurrency('USD');
+                            setTenantPaymentGateway('stripe');
+                          }
+                        }}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-slate-50 focus:outline-none focus:border-[#6B8E4E] focus:bg-white transition-all font-bold text-slate-850 cursor-pointer"
+                      >
+                        <option value="Perú">Perú 🇵🇪</option>
+                        <option value="México">México 🇲🇽</option>
+                        <option value="EEUU">Estados Unidos 🇺🇸</option>
+                        <option value="Otros">Otros</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black uppercase text-slate-450 tracking-wider">Moneda de Facturación</label>
+                      <input 
+                        type="text"
+                        disabled
+                        value={`${tenantCurrency} (${tenantCurrency === 'PEN' ? 'Soles' : tenantCurrency === 'MXN' ? 'Pesos Mex.' : 'Dólares US'})`}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-slate-100 font-bold text-slate-600 cursor-not-allowed"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black uppercase text-slate-450 tracking-wider">Modelo de Pago</label>
+                      <input 
+                        type="text"
+                        disabled
+                        value="Licencia por uso (Membresía)"
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-slate-100 font-bold text-slate-600 cursor-not-allowed"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black uppercase text-slate-450 tracking-wider">Pasarela Integrada</label>
+                      <div className="w-full px-3 py-1.5 border border-slate-200 rounded-xl bg-slate-50 flex items-center justify-between text-xs font-black">
+                        <span className="text-slate-850 capitalize font-extrabold">{tenantPaymentGateway}</span>
+                        {tenantPaymentGateway === 'stripe' ? (
+                          <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-700 text-[9px] font-bold">STRIPE SECURE</span>
+                        ) : tenantPaymentGateway === 'culqui' ? (
+                          <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 text-[9px] font-bold">CULQUI API</span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-700 text-[9px] font-bold">CONEKTA PAY</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black uppercase text-slate-450 tracking-wider">Fecha de Inicio de Licencia</label>
+                      <input 
+                        type="date"
+                        required
+                        value={tenantStartDate}
+                        onChange={(e) => setTenantStartDate(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-slate-50 focus:outline-none focus:border-[#6B8E4E] focus:bg-white transition-all font-bold text-slate-850"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black uppercase text-slate-450 tracking-wider">Fecha de Cierre (Opcional)</label>
+                      <input 
+                        type="date"
+                        value={tenantEndDate || ''}
+                        onChange={(e) => setTenantEndDate(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-slate-50 focus:outline-none focus:border-[#6B8E4E] focus:bg-white transition-all font-bold text-slate-850"
+                      />
                     </div>
                   </div>
                 </div>

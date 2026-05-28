@@ -40,11 +40,12 @@ export default function Header() {
     
     const lastPart = parts[parts.length - 1];
     switch (lastPart) {
-      case 'courses': return 'Catálogo de Cursos y Oferta';
-      case 'professors': return 'Gestión de Facultad (Profesores)';
+      case 'courses': return 'Catálogo de cursos';
+      case 'professors': return 'Profesores';
       case 'campuses': return 'Sedes';
       case 'students': return 'Alumnos';
-      case 'grades': return 'Calificaciones Académicas';
+      case 'grades': return 'Calificaciones';
+      case 'roles': return 'Roles';
       case 'payments': return 'Pagos y cobros';
       case 'predictive': return 'Programación predictiva';
       case 'comms': return 'Centro de Comunicación';
